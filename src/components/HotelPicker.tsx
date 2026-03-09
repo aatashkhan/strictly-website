@@ -30,12 +30,22 @@ export default function HotelPicker({
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const cityInfo = useMemo(() => getCityData(city), [city]);
+
   const stayVenues = useMemo(() => {
-    if (!city) return [];
-    const data = getCityData(city);
-    if (!data) return [];
-    return data.venues.filter((v) => v.category === "stay");
-  }, [city]);
+    if (!cityInfo) return [];
+    return cityInfo.venues.filter((v) => v.category === "stay");
+  }, [cityInfo]);
+
+  // Get city center from venue coordinates for location-biased hotel search
+  const cityCenter = useMemo(() => {
+    if (!cityInfo) return null;
+    const withCoords = cityInfo.venues.filter((v) => v.lat && v.lng);
+    if (withCoords.length === 0) return null;
+    const avgLat = withCoords.reduce((s, v) => s + (v.lat || 0), 0) / withCoords.length;
+    const avgLng = withCoords.reduce((s, v) => s + (v.lng || 0), 0) / withCoords.length;
+    return { lat: avgLat, lng: avgLng };
+  }, [cityInfo]);
 
   // Debounced search
   useEffect(() => {
@@ -49,9 +59,11 @@ export default function HotelPicker({
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await fetch(
-          `/api/places?q=${encodeURIComponent(searchQuery + " " + city)}`
-        );
+        let url = `/api/places?q=${encodeURIComponent(searchQuery + " " + city)}`;
+        if (cityCenter) {
+          url += `&lat=${cityCenter.lat.toFixed(4)}&lng=${cityCenter.lng.toFixed(4)}`;
+        }
+        const res = await fetch(url);
         const data = await res.json();
         if (Array.isArray(data)) {
           setSuggestions(data);
@@ -67,7 +79,7 @@ export default function HotelPicker({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [searchQuery, city]);
+  }, [searchQuery, city, cityCenter]);
 
   const handleSelectVenue = (venue: Venue) => {
     setSearchQuery("");

@@ -16,8 +16,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Use Google Places Text Search (New) API
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(q)}&type=lodging&key=${API_KEY}`;
+    // Use Google Places Text Search API with location bias
+    const lat = request.nextUrl.searchParams.get("lat");
+    const lng = request.nextUrl.searchParams.get("lng");
+    let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(q)}&type=lodging&key=${API_KEY}`;
+    if (lat && lng) {
+      url += `&location=${lat},${lng}&radius=50000`; // 50km bias
+    }
     const res = await fetch(url);
     const data = await res.json();
 
