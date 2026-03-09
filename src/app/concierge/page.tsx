@@ -37,7 +37,15 @@ function ConciergeContent() {
 
   const handleFormSubmit = (data: TripFormData) => {
     setTripData(data);
-    setView("email");
+    // Skip email gate if user is already signed in
+    if (user) {
+      const fullData = { ...data, email: user.email || "" };
+      setTripData(fullData);
+      setView("loading");
+      generateItinerary(fullData);
+    } else {
+      setView("email");
+    }
   };
 
   // QoL 3: Surprise Me — pick a random featured city with sensible defaults
@@ -57,21 +65,23 @@ function ConciergeContent() {
       departure: null,
       hotel: null,
     };
-    setTripData(surpriseData);
-    setView("email");
+    if (user) {
+      const fullData = { ...surpriseData, email: user.email || "" };
+      setTripData(fullData);
+      setView("loading");
+      generateItinerary(fullData);
+    } else {
+      setTripData(surpriseData);
+      setView("email");
+    }
   };
 
-  const handleEmailSubmit = async (email: string) => {
-    if (!tripData) return;
-    const fullData = { ...tripData, email };
-    setTripData(fullData);
-    setView("loading");
-
+  const generateItinerary = async (data: TripFormData) => {
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fullData),
+        body: JSON.stringify(data),
       });
 
       if (!response.ok) {
@@ -83,11 +93,11 @@ function ConciergeContent() {
       setView("itinerary");
 
       // Send itinerary email if user provided an email
-      if (email) {
+      if (data.email) {
         fetch("/api/send-itinerary", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, itinerary: result, tripData: fullData }),
+          body: JSON.stringify({ email: data.email, itinerary: result, tripData: data }),
         }).catch((err) => console.error("Failed to send itinerary email:", err));
       }
     } catch (error) {
@@ -95,6 +105,14 @@ function ConciergeContent() {
       setItinerary(null);
       setView("itinerary");
     }
+  };
+
+  const handleEmailSubmit = async (email: string) => {
+    if (!tripData) return;
+    const fullData = { ...tripData, email };
+    setTripData(fullData);
+    setView("loading");
+    generateItinerary(fullData);
   };
 
   const handleSaveTrip = async (currentItinerary?: ItineraryData) => {
@@ -257,6 +275,8 @@ function AuthModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState("");
 
   const handleGoogle = async () => {
+    // Clear itinerary guard so OAuth redirect doesn't trigger "are you sure" prompt
+    (window as unknown as Record<string, boolean>).__strictlyHasItinerary = false;
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: window.location.origin + "/concierge" },

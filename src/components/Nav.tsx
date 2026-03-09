@@ -24,6 +24,8 @@ export default function Nav() {
   const router = useRouter();
 
   const guardedNavigate = useCallback((href: string, e: React.MouseEvent) => {
+    // Don't guard My Trips — it either opens auth modal or goes to saved trips
+    if (href === "/trips") return;
     const hasItinerary = (window as unknown as Record<string, boolean>).__strictlyHasItinerary;
     if (hasItinerary) {
       e.preventDefault();
