@@ -162,8 +162,24 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
             onFocus={() => setShowCityDropdown(true)}
             onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
             placeholder="Search for a city..."
-            className="w-full px-4 py-3 bg-surface border border-border rounded-xl text-sm font-mono text-brown placeholder:text-muted focus:outline-none focus:border-gold transition-colors"
+            className="w-full px-4 py-3 pr-10 bg-surface border border-border rounded-xl text-sm font-mono text-brown placeholder:text-muted focus:outline-none focus:border-gold transition-colors"
           />
+          {city && (
+            <button
+              type="button"
+              onClick={() => {
+                setCity("");
+                setCitySearch("");
+                setHotel(null);
+                setDuration("");
+                setDurationError("");
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full text-muted hover:text-brown hover:bg-border/50 transition-colors text-lg leading-none"
+              aria-label="Clear city"
+            >
+              &times;
+            </button>
+          )}
           {showCityDropdown && filteredCities.length > 0 && (
             <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-surface border border-border rounded-xl shadow-lg max-h-60 overflow-y-auto">
               {filteredCities.map((c) => {
