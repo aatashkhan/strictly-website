@@ -19,6 +19,26 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { trip_id, venue_id, day_index, item_index, note } = body;
 
+  if (!trip_id || day_index === undefined || item_index === undefined) {
+    return NextResponse.json(
+      { error: "trip_id, day_index, and item_index are required" },
+      { status: 400 }
+    );
+  }
+
+  // Prevent duplicate check-ins for the same item
+  const { data: existing } = await supabase
+    .from("checkins")
+    .select("id")
+    .eq("trip_id", trip_id)
+    .eq("day_index", day_index)
+    .eq("item_index", item_index)
+    .maybeSingle();
+
+  if (existing) {
+    return NextResponse.json(existing);
+  }
+
   const { data, error } = await supabase
     .from("checkins")
     .insert({

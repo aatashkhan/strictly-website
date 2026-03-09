@@ -11,19 +11,25 @@ const client = new Anthropic();
 
 const EMAILS_FILE = path.join(process.cwd(), "src", "data", "emails.json");
 
-async function storeEmail(email: string, city: string) {
-  if (!email) return;
+async function storeEmail(email: string, city: string): Promise<boolean> {
+  if (!email) return false;
 
-  let emails: Array<{ email: string; city: string; timestamp: string }> = [];
   try {
-    const raw = await fs.readFile(EMAILS_FILE, "utf-8");
-    emails = JSON.parse(raw);
-  } catch {
-    // file doesn't exist yet
-  }
+    let emails: Array<{ email: string; city: string; timestamp: string }> = [];
+    try {
+      const raw = await fs.readFile(EMAILS_FILE, "utf-8");
+      emails = JSON.parse(raw);
+    } catch {
+      // file doesn't exist yet
+    }
 
-  emails.push({ email, city, timestamp: new Date().toISOString() });
-  await fs.writeFile(EMAILS_FILE, JSON.stringify(emails, null, 2));
+    emails.push({ email, city, timestamp: new Date().toISOString() });
+    await fs.writeFile(EMAILS_FILE, JSON.stringify(emails, null, 2));
+    return true;
+  } catch (err) {
+    console.error("Failed to store email:", err);
+    return false;
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -31,11 +37,9 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as TripFormData;
     const { city, email } = body;
 
-    // Store email if provided
+    // Store email if provided (non-blocking, but logged on failure)
     if (email) {
-      storeEmail(email, city).catch((err) =>
-        console.error("Failed to store email:", err)
-      );
+      storeEmail(email, city);
     }
 
     const cityData = getCityData(city);

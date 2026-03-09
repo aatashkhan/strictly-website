@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 type View = "form" | "email" | "loading" | "itinerary";
 
 const TAGLINES = [
+  // Original 12
   "Checking in?",
   "Bon voyage, babe.",
   "Where to next?",
@@ -29,27 +30,119 @@ const TAGLINES = [
   "Grab your passport.",
   "Time to explore.",
   "Strictly the best.",
+  // Travel excitement
+  "Window or aisle?",
+  "Wheels up.",
+  "New city, who dis?",
+  "Boarding now.",
+  "Passport stamp incoming.",
+  "Takeoff in 3, 2, 1\u2026",
+  "Jet lag is a vibe.",
+  "Touch down, let\u2019s go.",
+  "Next stop: magic.",
+  "Off the beaten path.",
+  // Denna's voice
+  "Only the good stuff.",
+  "Trust the list.",
+  "Denna-approved.",
+  "Strictly curated.",
+  "The strict list awaits.",
+  "Vetted and obsessed.",
+  "I know a place.",
+  "You\u2019re in good hands.",
+  "Consider this handled.",
+  "Leave the planning to me.",
+  // Aspirational / dreamy
+  "Sunset plans, incoming.",
+  "That table is waiting for you.",
+  "Picture this.",
+  "Your dream trip, loaded.",
+  "Somewhere beautiful awaits.",
+  "Wander with intention.",
+  "Chase the golden light.",
+  "A little magic ahead.",
+  "Views for days.",
+  "Blue water calling.",
+  // Cheeky / fun
+  "Your out-of-office starts now.",
+  "Main character energy.",
+  "Plot twist: you deserve this.",
+  "Treat yourself. Strictly.",
+  "No bad trips here.",
+  "Zero FOMO guaranteed.",
+  "Be the friend with the recs.",
+  "Unhinged itinerary incoming.",
+  "Do not disturb.",
+  "Gone exploring, brb.",
+  "Detour? Always.",
+  "Say yes to the trip.",
+  // Seasonal / situational
+  "Rooftop season.",
+  "Golden hour awaits.",
+  "Summer plans, sorted.",
+  "Long weekend energy.",
+  "Holiday mode: on.",
+  "Off-season is underrated.",
+  "Warm weather pending.",
+  "Patio weather, finally.",
+  // Food & drink
+  "Save room for dessert.",
+  "First stop: espresso.",
+  "Dinner reservations, locked.",
+  "Wine list, incoming.",
+  "Order the pasta.",
+  "That cocktail bar, though.",
+  "Brunch is non-negotiable.",
+  "Aperitivo hour awaits.",
+  // Short & punchy
+  "Let\u2019s go.",
+  "This is it.",
+  "Oh, the places.",
+  "Start here.",
+  "So good.",
+  "Big plans.",
+  "Stay gold.",
+  "Go further.",
+  "Bask in it.",
+  "The good life.",
+  "Good taste only.",
+  "You know the vibe.",
+  "Obsessed already.",
+  "Worth the flight.",
+  "Trip of a lifetime.",
+  "Life\u2019s short. Travel more.",
+  "Cabin crew, mood.",
+  "Itinerary loaded.",
 ];
 
 function RotatingTagline() {
-  const [index, setIndex] = useState(0);
+  const [queue, setQueue] = useState<number[]>([]);
+  const [queueIndex, setQueueIndex] = useState(0);
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    // Pick a random starting index
-    setIndex(Math.floor(Math.random() * TAGLINES.length));
+    // Fisher-Yates shuffle
+    const indices = Array.from({ length: TAGLINES.length }, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    setQueue(indices);
   }, []);
 
   useEffect(() => {
+    if (queue.length === 0) return;
     const interval = setInterval(() => {
       setVisible(false);
       setTimeout(() => {
-        setIndex((prev) => (prev + 1) % TAGLINES.length);
+        setQueueIndex((prev) => (prev + 1) % queue.length);
         setVisible(true);
       }, 400);
     }, 3500);
     return () => clearInterval(interval);
-  }, []);
+  }, [queue]);
+
+  if (queue.length === 0) return null;
 
   return (
     <span
@@ -57,7 +150,7 @@ function RotatingTagline() {
         visible ? "opacity-100" : "opacity-0"
       }`}
     >
-      {TAGLINES[index]}
+      {TAGLINES[queue[queueIndex]]}
     </span>
   );
 }

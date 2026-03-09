@@ -81,7 +81,7 @@ export default function TodayTimeline({
           </span>
           <span className="text-xs font-mono text-muted">Day {day.day}</span>
         </div>
-        <div className="w-full h-2 bg-border rounded-full overflow-hidden flex gap-0.5">
+        <div className="w-full h-2 bg-border rounded-full overflow-hidden flex gap-0.5" role="progressbar" aria-valuenow={checkedInCount} aria-valuemin={0} aria-valuemax={totalItems} aria-label={`${checkedInCount} of ${totalItems} stops checked in`}>
           {day.items.map((_, i) => (
             <div
               key={i}

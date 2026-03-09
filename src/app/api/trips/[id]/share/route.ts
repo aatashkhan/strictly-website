@@ -14,11 +14,21 @@ export async function GET(
 
   const supabase = createServerSupabase(token);
 
+  // Verify the authenticated user owns this trip
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { data, error } = await supabase
     .from("trips")
-    .select("id, share_token")
+    .select("id, share_token, user_id")
     .eq("id", params.id)
     .single();
+
+  if (!error && data && data.user_id !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   if (error || !data) {
     return NextResponse.json({ error: "Trip not found" }, { status: 404 });

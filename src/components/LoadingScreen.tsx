@@ -6,6 +6,10 @@ const genericPhrases = [
   "Pulling Denna\u2019s strict picks\u2026",
   "Curating the good stuff\u2026",
   "Building your perfect trip\u2026",
+  "Mapping out the vibes\u2026",
+  "Locking in the reservations\u2026",
+  "Finding the spots only locals know\u2026",
+  "This is going to be so good\u2026",
   "Almost there\u2026",
 ];
 
@@ -50,6 +54,66 @@ const cityTips: Record<string, string[]> = {
     "West Village for a perfect dinner walk",
     "The High Line at sunset \u2014 it\u2019s a clich\u00E9 because it works",
   ],
+  "Mexico City": [
+    "Roma Norte is the neighborhood for everything",
+    "Street tacos after midnight are a spiritual experience",
+    "The mercados are better than any restaurant",
+  ],
+  Nashville: [
+    "Broadway is for tourists \u2014 East Nashville is the real scene",
+    "Hot chicken is a must but pace yourself",
+    "The songwriter rounds are the best live music in the country",
+  ],
+  Miami: [
+    "Design District for shopping, Wynwood for the energy",
+    "Little Havana for the cafecito, always",
+    "South Beach at sunrise before the crowds",
+  ],
+  Barcelona: [
+    "El Born over the Gothic Quarter every time",
+    "Vermut hour is sacred \u2014 respect the tradition",
+    "Skip La Rambla, walk Passeig de Gr\u00E0cia instead",
+  ],
+  Lisbon: [
+    "Alfama is the soul of the city",
+    "The pastel de nata at Time Out Market is overrated \u2014 go to Manteigaria",
+    "Take the 28 tram early or not at all",
+  ],
+  Amsterdam: [
+    "Jordaan is the strictly best neighborhood, no debate",
+    "The canal-side restaurants are a vibe but check reviews first",
+    "Rent a bike on day one \u2014 you\u2019ll never look back",
+  ],
+  Marrakech: [
+    "Get lost in the medina on purpose \u2014 that\u2019s where the magic is",
+    "Rooftop dinner with a view of the Atlas Mountains",
+    "The riads are the move over big hotels",
+  ],
+  Austin: [
+    "South Congress for the walk, East Austin for the food",
+    "BBQ lines are long but they\u2019re not lying about the brisket",
+    "Live music on a random Tuesday \u2014 that\u2019s the Austin promise",
+  ],
+  Tulum: [
+    "Beach clubs are pricey but pick one good one",
+    "The cenotes are worth the drive every time",
+    "Rent a bike, skip the taxi drama",
+  ],
+  "San Francisco": [
+    "Mission District for the best burrito of your life",
+    "Fog is part of the aesthetic \u2014 layer up",
+    "The ferry building on Saturday morning is a must",
+  ],
+  Charleston: [
+    "King Street for shopping, Husk for dinner",
+    "The lowcountry cuisine is genuinely special",
+    "Golden hour on the Battery is undefeated",
+  ],
+  Kyoto: [
+    "Arashiyama bamboo grove at 7am, before the crowds",
+    "The kaiseki meal is worth the splurge",
+    "Temple-hop on foot \u2014 it\u2019s the best way to see the city",
+  ],
 };
 
 interface LoadingScreenProps {
@@ -60,8 +124,13 @@ export default function LoadingScreen({ city }: LoadingScreenProps) {
   const [phraseIndex, setPhraseIndex] = useState(0);
 
   const phrases = useMemo(() => {
-    if (city && cityTips[city]) {
-      return [...genericPhrases.slice(0, 2), ...cityTips[city], ...genericPhrases.slice(2)];
+    if (!city) return genericPhrases;
+    // Fuzzy match city name (case-insensitive, partial match)
+    const tips = cityTips[city] ?? Object.entries(cityTips).find(
+      ([key]) => key.toLowerCase() === city.toLowerCase() || city.toLowerCase().includes(key.toLowerCase())
+    )?.[1];
+    if (tips) {
+      return [...genericPhrases.slice(0, 2), ...tips, ...genericPhrases.slice(2)];
     }
     return genericPhrases;
   }, [city]);

@@ -93,6 +93,13 @@ export default function TripDetailPage() {
     }
   }, [user, authLoading, fetchTrip]);
 
+  // Cleanup save timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
+
   const cityVenues: Venue[] = useMemo(() => {
     if (!trip?.city) return [];
     const cityData = getCityData(trip.city);

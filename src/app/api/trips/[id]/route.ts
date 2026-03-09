@@ -59,6 +59,23 @@ export async function PUT(
   }
 
   const supabase = createServerSupabase(token);
+
+  // Verify the authenticated user owns this trip
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("user_id")
+    .eq("id", params.id)
+    .single();
+
+  if (!trip || trip.user_id !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await request.json();
 
   const updateData: Record<string, unknown> = {};
@@ -93,6 +110,22 @@ export async function DELETE(
   }
 
   const supabase = createServerSupabase(token);
+
+  // Verify the authenticated user owns this trip
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("user_id")
+    .eq("id", params.id)
+    .single();
+
+  if (!trip || trip.user_id !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { error } = await supabase
     .from("trips")

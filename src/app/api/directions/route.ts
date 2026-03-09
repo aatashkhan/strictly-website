@@ -22,9 +22,20 @@ export async function POST(request: NextRequest) {
   try {
     const { waypoints } = (await request.json()) as { waypoints: Waypoint[] };
 
-    if (!waypoints || waypoints.length < 2) {
+    if (!waypoints || !Array.isArray(waypoints) || waypoints.length < 2) {
       return NextResponse.json(
         { error: "At least 2 waypoints required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate waypoint structure
+    const validWaypoints = waypoints.filter(
+      (w) => typeof w?.lat === "number" && typeof w?.lng === "number" && isFinite(w.lat) && isFinite(w.lng)
+    );
+    if (validWaypoints.length < 2) {
+      return NextResponse.json(
+        { error: "At least 2 valid waypoints with lat/lng required" },
         { status: 400 }
       );
     }
@@ -37,18 +48,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check cache
-    const key = cacheKey(waypoints);
+    // Check cache (use validated waypoints from here on)
+    const key = cacheKey(validWaypoints);
     const cached = cache.get(key);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return NextResponse.json({ legs: cached.legs, cached: true });
     }
 
     // Build Google Directions API request
-    const origin = `${waypoints[0].lat},${waypoints[0].lng}`;
-    const destination = `${waypoints[waypoints.length - 1].lat},${waypoints[waypoints.length - 1].lng}`;
+    const origin = `${validWaypoints[0].lat},${validWaypoints[0].lng}`;
+    const destination = `${validWaypoints[validWaypoints.length - 1].lat},${validWaypoints[validWaypoints.length - 1].lng}`;
 
-    const intermediates = waypoints.slice(1, -1);
+    const intermediates = validWaypoints.slice(1, -1);
     const waypointsParam = intermediates.length > 0
       ? `&waypoints=${intermediates.map(w => `${w.lat},${w.lng}`).join('|')}`
       : '';

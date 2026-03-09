@@ -159,7 +159,8 @@ export async function POST(request: NextRequest) {
       tripData: TripFormData;
     };
 
-    if (!email || !email.includes("@")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
       return NextResponse.json({ error: "Valid email required" }, { status: 400 });
     }
 

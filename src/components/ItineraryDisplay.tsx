@@ -69,6 +69,7 @@ function TravelIndicator({ travel, onModeChange }: { travel: TravelSegment; onMo
         onClick={handleCycleMode}
         className={`text-[11px] font-mono text-muted whitespace-nowrap ${onModeChange ? 'hover:text-gold cursor-pointer transition-colors' : 'cursor-default'}`}
         title={onModeChange ? "Tap to change transport mode" : undefined}
+        aria-label={`${travel.summary}, ${travel.distance}. ${onModeChange ? "Tap to change transport mode" : ""}`}
       >
         {icon} {travel.summary} ({travel.distance})
       </button>

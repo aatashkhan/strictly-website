@@ -88,10 +88,9 @@ export default function HotelPicker({
         }
         const res = await fetch(url);
         const data = await res.json();
-        if (Array.isArray(data)) {
-          setSuggestions(data);
-          setShowSuggestions(true);
-        }
+        const results = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
+        setSuggestions(results);
+        setShowSuggestions(results.length > 0);
       } catch {
         setSuggestions([]);
       } finally {
