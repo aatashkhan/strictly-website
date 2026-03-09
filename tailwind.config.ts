@@ -9,8 +9,23 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        cream: "rgb(var(--color-bg) / <alpha-value>)",
+        brown: "rgb(var(--color-text) / <alpha-value>)",
+        gold: "rgb(var(--color-accent) / <alpha-value>)",
+        secondary: "rgb(var(--color-secondary) / <alpha-value>)",
+        muted: "rgb(var(--color-muted) / <alpha-value>)",
+        border: "rgb(var(--color-border) / <alpha-value>)",
+        light: "rgb(var(--color-light) / <alpha-value>)",
+        surface: "rgb(var(--color-surface) / <alpha-value>)",
+        eat: "#C4705A",
+        stay: "#5A70C4",
+        explore: "#5AC470",
+        shop: "#C45AB4",
+        drink: "#C4985A",
+        spa: "#C4B45A",
+      },
+      fontFamily: {
+        mono: ["Roboto Mono", "monospace"],
       },
     },
   },
