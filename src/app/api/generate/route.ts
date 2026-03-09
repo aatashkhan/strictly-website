@@ -46,8 +46,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Filter out closed venues before prompt construction and enrichment
+    const activeVenues = cityData.venues.filter(v => v.status !== 'closed');
+    const activeCityData = { ...cityData, venues: activeVenues, venue_count: activeVenues.length };
+
     const systemPrompt = buildSystemPrompt();
-    const userPrompt = buildUserPrompt(body, cityData);
+    const userPrompt = buildUserPrompt(body, activeCityData);
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-20250514",
@@ -61,12 +65,15 @@ export async function POST(request: NextRequest) {
 
     const itinerary: ItineraryData = JSON.parse(text);
 
-    // Post-process: match venues, calculate travel, validate hours
+    // Post-process: match venues, calculate travel, validate hours, optimize route order
     const tripStartDate = body.arrival?.date ?? undefined;
     itinerary.days = enrichItinerary(
       itinerary.days,
-      cityData.venues,
-      tripStartDate
+      activeVenues,
+      tripStartDate,
+      body.hotel?.lat,
+      body.hotel?.lng,
+      body.transitPreference
     );
 
     return NextResponse.json(itinerary);

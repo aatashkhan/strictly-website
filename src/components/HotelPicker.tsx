@@ -34,7 +34,7 @@ export default function HotelPicker({
 
   const stayVenues = useMemo(() => {
     if (!cityInfo) return [];
-    return cityInfo.venues.filter((v) => v.category === "stay");
+    return cityInfo.venues.filter((v) => v.category === "stay" && v.status !== "closed");
   }, [cityInfo]);
 
   // Get city center from venue coordinates for location-biased hotel search

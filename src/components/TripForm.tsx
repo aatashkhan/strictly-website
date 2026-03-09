@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import type { TripFormData, FlightInfo, HotelSelection } from "@/lib/types";
-import { VIBES, COMPANIONS, BUDGETS, PACES } from "@/lib/constants";
+import { VIBES, COMPANIONS, BUDGETS, PACES, TRANSIT_MODES } from "@/lib/constants";
+import type { TransitMode } from "@/lib/types";
 import { getCities, getCityData } from "@/lib/venues";
 import FlightInput from "./FlightInput";
 import HotelPicker from "./HotelPicker";
@@ -41,6 +42,7 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
   const [budget, setBudget] = useState(initialData?.budget ?? "");
   const [pace, setPace] = useState(initialData?.pace ?? "balanced");
   const [notes, setNotes] = useState(initialData?.notes ?? "");
+  const [transitPreference, setTransitPreference] = useState<TransitMode>(initialData?.transitPreference ?? "auto");
   const [durationError, setDurationError] = useState("");
 
   const filteredCities = useMemo(() => {
@@ -126,6 +128,7 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
       arrival,
       departure,
       hotel,
+      transitPreference,
     });
   };
 
@@ -349,6 +352,34 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
         {pace && (
           <p className="mt-2 text-xs font-mono text-muted">
             {PACES.find((p) => p.value === pace)?.desc}
+          </p>
+        )}
+      </div>
+
+      {/* Transit Preference */}
+      <div>
+        <label className="block uppercase text-xs tracking-widest text-muted font-mono mb-3">
+          How do you get around?
+        </label>
+        <div className="flex flex-wrap gap-3">
+          {TRANSIT_MODES.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => setTransitPreference(t.value as TransitMode)}
+              className={`px-5 py-2 rounded-full border text-sm font-mono transition-all ${
+                transitPreference === t.value
+                  ? "bg-brown text-cream border-brown"
+                  : "border-border text-secondary hover:border-gold"
+              }`}
+            >
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+        {transitPreference && (
+          <p className="mt-2 text-xs font-mono text-muted">
+            {TRANSIT_MODES.find((t) => t.value === transitPreference)?.desc}
           </p>
         )}
       </div>

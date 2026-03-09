@@ -16,6 +16,7 @@ export interface ItineraryState {
 type ItineraryAction =
   | { type: "SWAP_VENUE"; dayIndex: number; itemIndex: number; newVenue: Venue; newNote?: string }
   | { type: "UPDATE_FROM_CHAT"; itinerary: ItineraryData }
+  | { type: "CHANGE_TRAVEL_MODE"; dayIndex: number; itemIndex: number; newMode: string }
   | { type: "UNDO" }
   | { type: "REDO" }
   | { type: "RESET" };
@@ -68,6 +69,42 @@ function itineraryReducer(
       return {
         ...state,
         current: updated,
+        history: [...state.history, state.current],
+        future: [],
+      };
+    }
+
+    case "CHANGE_TRAVEL_MODE": {
+      const { dayIndex, itemIndex, newMode } = action;
+      const newDays = state.current.days.map((day, di) => {
+        if (di !== dayIndex) return day;
+        const newItems = day.items.map((item, ii) => {
+          if (ii !== itemIndex || !item.travelToNext) return item;
+          const travel = item.travelToNext;
+          // Parse distance to get km value for re-estimation
+          const distKm = parseFloat(travel.distance) || 1;
+          let duration: number;
+          let summary: string;
+          if (newMode === 'walking') {
+            duration = Math.max(Math.round((distKm / 5) * 60), 2);
+            summary = `${duration} min walk`;
+          } else if (newMode === 'driving') {
+            duration = Math.max(Math.round((distKm / 30) * 60), 4);
+            summary = `${duration} min drive`;
+          } else {
+            duration = Math.max(Math.round((distKm / 25) * 60), 5);
+            summary = `${duration} min transit`;
+          }
+          return {
+            ...item,
+            travelToNext: { ...travel, mode: newMode, duration, summary },
+          };
+        });
+        return { ...day, items: newItems };
+      });
+      return {
+        ...state,
+        current: { ...state.current, days: newDays },
         history: [...state.history, state.current],
         future: [],
       };
@@ -146,6 +183,13 @@ export function useItineraryState(
     dispatch({ type: "UPDATE_FROM_CHAT", itinerary });
   }, []);
 
+  const changeTravelMode = useCallback(
+    (dayIndex: number, itemIndex: number, newMode: string) => {
+      dispatch({ type: "CHANGE_TRAVEL_MODE", dayIndex, itemIndex, newMode });
+    },
+    []
+  );
+
   const undo = useCallback(() => dispatch({ type: "UNDO" }), []);
   const redo = useCallback(() => dispatch({ type: "REDO" }), []);
   const reset = useCallback(() => dispatch({ type: "RESET" }), []);
@@ -156,6 +200,7 @@ export function useItineraryState(
     canRedo: state.future.length > 0,
     swapVenue,
     updateFromChat,
+    changeTravelMode,
     undo,
     redo,
     reset,

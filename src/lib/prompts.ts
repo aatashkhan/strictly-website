@@ -158,10 +158,24 @@ export function buildUserPrompt(
 
   lines.push("ROUTING INSTRUCTIONS:");
   lines.push("- Each day should focus on 1-2 nearby neighborhoods. Do NOT zigzag across the city.");
+  lines.push("- Plan each day as a smooth geographic arc: start near the hotel, move progressively outward through a neighborhood, then loop back. NEVER send the traveler to Point A, then far away to Point B, then back near Point A for Point C.");
+  lines.push("- Think of each day's route like a loop or a line — venues should flow in one general direction, not bounce back and forth.");
   lines.push("- Use specific times (e.g. '9:00 AM', '12:30 PM') for every item, not vague time blocks.");
   lines.push("- Allow realistic time between stops — at least 15-30 min for travel between venues.");
   lines.push("- Check the opening hours above and do NOT schedule a venue when it's closed.");
   lines.push("- Name each venue EXACTLY as listed in the database — do not paraphrase or abbreviate.");
+
+  // Transit preference instructions
+  const transitPref = tripData.transitPreference ?? 'auto';
+  if (transitPref === 'rideshare') {
+    lines.push("- TRANSIT: Traveler prefers Uber/Lyft for all transportation. Do not suggest public transit, subways, or buses. Reference rideshare/car service when mentioning getting between venues.");
+  } else if (transitPref === 'public_transit') {
+    lines.push("- TRANSIT: Traveler prefers public transit (subway, bus, tram). Mention specific transit lines or stops when relevant. Only suggest walking for very short distances.");
+  } else if (transitPref === 'walking_preferred') {
+    lines.push("- TRANSIT: Traveler prefers walking whenever possible. Cluster venues extra tightly by neighborhood. Only suggest a car/rideshare for distances that would take more than 25 minutes to walk.");
+  } else if (transitPref === 'rental_car') {
+    lines.push("- TRANSIT: Traveler has a rental car. Reference driving and mention parking tips when relevant. Don't suggest public transit.");
+  }
   lines.push("");
 
   lines.push(

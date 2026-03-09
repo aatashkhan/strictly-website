@@ -44,14 +44,34 @@ function HotelCard({ name, address }: { name: string; address?: string }) {
   );
 }
 
-function TravelIndicator({ travel }: { travel: TravelSegment }) {
+const TRAVEL_MODES = [
+  { mode: 'walking', icon: '\u{1F6B6}', label: 'Walk' },
+  { mode: 'transit', icon: '\u{1F68C}', label: 'Transit' },
+  { mode: 'driving', icon: '\u{1F697}', label: 'Drive' },
+] as const;
+
+function TravelIndicator({ travel, onModeChange }: { travel: TravelSegment; onModeChange?: (mode: string) => void }) {
   const icon = travel.mode === 'walking' ? '\u{1F6B6}' : travel.mode === 'transit' ? '\u{1F68C}' : '\u{1F697}';
+
+  const handleCycleMode = () => {
+    if (!onModeChange) return;
+    const modes = TRAVEL_MODES.map(m => m.mode as string);
+    const currentIdx = modes.indexOf(travel.mode);
+    const nextMode = modes[(currentIdx + 1) % modes.length];
+    onModeChange(nextMode);
+  };
+
   return (
     <div className="flex items-center gap-2 py-2 pl-24">
       <div className="flex-1 border-t border-dashed border-border" />
-      <span className="text-[11px] font-mono text-muted whitespace-nowrap">
+      <button
+        type="button"
+        onClick={handleCycleMode}
+        className={`text-[11px] font-mono text-muted whitespace-nowrap ${onModeChange ? 'hover:text-gold cursor-pointer transition-colors' : 'cursor-default'}`}
+        title={onModeChange ? "Tap to change transport mode" : undefined}
+      >
         {icon} {travel.summary} ({travel.distance})
-      </span>
+      </button>
       <div className="flex-1 border-t border-dashed border-border" />
     </div>
   );
@@ -226,6 +246,7 @@ export default function ItineraryDisplay({
     canRedo,
     swapVenue,
     updateFromChat,
+    changeTravelMode,
     undo,
     redo,
   } = useItineraryState(data!, venues, tripData.arrival?.date);
@@ -622,9 +643,12 @@ export default function ItineraryDisplay({
                           </div>
                         </div>
 
-                        {/* Travel to next stop */}
+                        {/* Travel to next stop — tap to change mode */}
                         {item.travelToNext && (
-                          <TravelIndicator travel={item.travelToNext} />
+                          <TravelIndicator
+                            travel={item.travelToNext}
+                            onModeChange={(mode) => changeTravelMode(dayIdx, i, mode)}
+                          />
                         )}
                       </div>
                     );

@@ -66,6 +66,14 @@ export const PACES = [
   { value: "packed", label: "Go Go Go", desc: "Jam-packed, hit everything" },
 ];
 
+export const TRANSIT_MODES = [
+  { value: "auto", label: "Auto", icon: "\u2728", desc: "Best option per segment" },
+  { value: "rideshare", label: "Rideshare", icon: "\u{1F697}", desc: "Uber/Lyft everywhere" },
+  { value: "public_transit", label: "Transit", icon: "\u{1F687}", desc: "Subway, bus, tram" },
+  { value: "walking_preferred", label: "Walking", icon: "\u{1F6B6}", desc: "Walk when possible, rideshare when far" },
+  { value: "rental_car", label: "Rental Car", icon: "\u{1F17F}\uFE0F", desc: "You have your own wheels" },
+] as const;
+
 export const FEATURED_CITIES = [
   "Paris",
   "Rome",

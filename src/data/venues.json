@@ -51292,7 +51292,9 @@
           "place_id": "ChIJjSB-_Te_woARubmbr5zgD3Q",
           "opening_hours": null,
           "google_maps_url": "https://maps.google.com/?cid=8363149996616038841",
-          "geocode_status": "verified"
+          "geocode_status": "verified",
+          "status": "closed",
+          "status_note": "Closed indefinitely as of Jan 2026"
         },
         {
           "name": "Etta",

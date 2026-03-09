@@ -27,6 +27,8 @@ export interface Venue {
   opening_hours: VenueOpeningHours | null;
   google_maps_url: string | null;
   geocode_status: 'verified' | 'unverified' | 'not_found';
+  status?: 'open' | 'closed' | 'temporarily_closed';
+  status_note?: string;
 }
 
 export interface CityData {
@@ -67,6 +69,8 @@ export interface HotelSelection {
   lng?: number;
 }
 
+export type TransitMode = 'auto' | 'rideshare' | 'public_transit' | 'walking_preferred' | 'rental_car';
+
 export interface TripFormData {
   city: string;
   duration: string;
@@ -79,6 +83,7 @@ export interface TripFormData {
   arrival: FlightInfo | null;
   departure: FlightInfo | null;
   hotel: HotelSelection | null;
+  transitPreference?: TransitMode;
 }
 
 export interface TravelSegment {

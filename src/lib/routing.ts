@@ -1,4 +1,4 @@
-import type { Venue, VenueOpeningHours, ItineraryItem, TravelSegment, ItineraryWarning } from './types';
+import type { Venue, VenueOpeningHours, ItineraryItem, TravelSegment, ItineraryWarning, TransitMode } from './types';
 
 /**
  * Haversine distance between two lat/lng points in kilometers.
@@ -24,16 +24,21 @@ function toRad(deg: number): number {
  * Estimate travel time and mode between two points.
  * Walking: ~5 km/h → if distance < 1.5 km, suggest walking
  * Transit/driving: ~25 km/h average in a city
+ * transitPreference overrides automatic mode selection.
  */
 export function estimateTravel(
   lat1: number, lng1: number,
-  lat2: number, lng2: number
+  lat2: number, lng2: number,
+  transitPreference?: TransitMode
 ): TravelSegment {
   const km = haversineKm(lat1, lng1, lat2, lng2);
   // Haversine is straight-line; real walking/driving is ~1.3-1.5x longer
   const realKm = km * 1.4;
 
-  if (realKm < 1.5) {
+  // Determine mode based on preference
+  const mode = resolveTransitMode(realKm, transitPreference);
+
+  if (mode === 'walking') {
     const minutes = Math.round((realKm / 5) * 60);
     return {
       distance: `${realKm.toFixed(1)} km`,
@@ -43,14 +48,163 @@ export function estimateTravel(
     };
   }
 
-  // For longer distances, estimate driving/transit
+  if (mode === 'driving') {
+    const minutes = Math.round((realKm / 30) * 60); // rideshare/car ~30km/h in city
+    return {
+      distance: `${realKm.toFixed(1)} km`,
+      duration: Math.max(minutes, 4),
+      mode: 'driving',
+      summary: `${Math.max(minutes, 4)} min drive`,
+    };
+  }
+
+  // transit
   const minutes = Math.round((realKm / 25) * 60);
   return {
     distance: `${realKm.toFixed(1)} km`,
     duration: Math.max(minutes, 5),
-    mode: realKm > 10 ? 'driving' : 'transit',
-    summary: `${Math.max(minutes, 5)} min ${realKm > 10 ? 'drive' : 'transit'}`,
+    mode: 'transit',
+    summary: `${Math.max(minutes, 5)} min transit`,
   };
+}
+
+/**
+ * Resolve the transit mode for a segment based on distance and user preference.
+ */
+function resolveTransitMode(realKm: number, preference?: TransitMode): string {
+  if (!preference || preference === 'auto') {
+    // Auto: walk < 1.5km, transit 1.5-10km, drive > 10km
+    if (realKm < 1.5) return 'walking';
+    if (realKm > 10) return 'driving';
+    return 'transit';
+  }
+  if (preference === 'walking_preferred') {
+    // Walk if < 2.5km (~30 min), otherwise rideshare
+    return realKm < 2.5 ? 'walking' : 'driving';
+  }
+  if (preference === 'rideshare') return 'driving';
+  if (preference === 'public_transit') return realKm < 1.0 ? 'walking' : 'transit';
+  if (preference === 'rental_car') return realKm < 0.8 ? 'walking' : 'driving';
+  return realKm < 1.5 ? 'walking' : 'transit';
+}
+
+/**
+ * Optimize the geographic order of items within a day to minimize zig-zagging.
+ * Uses nearest-neighbor heuristic starting from an anchor point (hotel or first venue).
+ * Preserves arrival/departure items and non-venue items in their original positions.
+ */
+export function optimizeRouteOrder(
+  items: ItineraryItem[],
+  venues: Venue[],
+  anchorLat?: number,
+  anchorLng?: number
+): ItineraryItem[] {
+  if (items.length <= 2) return items;
+
+  // Separate items into venue items (reorderable) and fixed items (arrival/departure/free time)
+  const fixedTypes = new Set(['arrival', 'departure', 'flight', 'travel', 'check-in', 'check-out']);
+  const indexed: Array<{ item: ItineraryItem; idx: number; lat?: number; lng?: number; fixed: boolean }> = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const isFixed = fixedTypes.has(item.type?.toLowerCase?.() ?? '') ||
+      item.name?.toLowerCase?.().includes('free time') ||
+      item.name?.toLowerCase?.().includes('hotel') ||
+      item.name?.toLowerCase?.().includes('airport');
+
+    let lat: number | undefined;
+    let lng: number | undefined;
+
+    if (item.lat != null && item.lng != null) {
+      lat = item.lat;
+      lng = item.lng;
+    } else {
+      const matched = matchVenue(item.name, venues);
+      if (matched?.lat && matched?.lng) {
+        lat = matched.lat;
+        lng = matched.lng;
+      }
+    }
+
+    indexed.push({ item, idx: i, lat, lng, fixed: isFixed });
+  }
+
+  // Get reorderable items that have coordinates
+  const reorderable = indexed.filter(e => !e.fixed && e.lat != null && e.lng != null);
+  const fixedItems = indexed.filter(e => e.fixed || (e.lat == null || e.lng == null));
+
+  if (reorderable.length <= 2) return items;
+
+  // Nearest-neighbor ordering starting from anchor (hotel) or first item
+  const startLat = anchorLat ?? reorderable[0].lat!;
+  const startLng = anchorLng ?? reorderable[0].lng!;
+
+  const ordered: typeof reorderable = [];
+  const remaining = [...reorderable];
+  let curLat = startLat;
+  let curLng = startLng;
+
+  while (remaining.length > 0) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const d = haversineKm(curLat, curLng, remaining[i].lat!, remaining[i].lng!);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    const chosen = remaining.splice(bestIdx, 1)[0];
+    ordered.push(chosen);
+    curLat = chosen.lat!;
+    curLng = chosen.lng!;
+  }
+
+  // Rebuild the items array: fixed items stay in position, reorderable fill the gaps
+  const result: ItineraryItem[] = [];
+
+  // Put leading fixed items first (arrival, check-in, etc)
+  const leadingFixed: typeof fixedItems = [];
+  const trailingFixed: typeof fixedItems = [];
+  const middleFixed: typeof fixedItems = [];
+
+  for (const f of fixedItems) {
+    if (f.idx === 0 || (f.idx < (reorderable[0]?.idx ?? Infinity))) {
+      leadingFixed.push(f);
+    } else if (f.idx >= (indexed.length - 1)) {
+      trailingFixed.push(f);
+    } else {
+      middleFixed.push(f);
+    }
+  }
+
+  // Leading fixed items
+  for (const f of leadingFixed.sort((a, b) => a.idx - b.idx)) {
+    result.push(f.item);
+  }
+
+  // Interleave reordered items
+  for (const o of ordered) {
+    result.push(o.item);
+  }
+
+  // Middle fixed items (like free time blocks) go after reorderable
+  for (const f of middleFixed.sort((a, b) => a.idx - b.idx)) {
+    result.push(f.item);
+  }
+
+  // Trailing fixed items
+  for (const f of trailingFixed.sort((a, b) => a.idx - b.idx)) {
+    result.push(f.item);
+  }
+
+  // Reassign times based on original time ordering (preserve the time slots, just reorder venues into them)
+  const originalTimes = items.map(i => ({ time: i.time, endTime: i.endTime, duration: i.duration }));
+  for (let i = 0; i < result.length && i < originalTimes.length; i++) {
+    result[i] = { ...result[i], time: originalTimes[i].time, endTime: originalTimes[i].endTime, duration: originalTimes[i].duration };
+  }
+
+  return result;
 }
 
 /**
@@ -257,11 +411,15 @@ function findOpenReplacement(
 /**
  * Enrich itinerary items with venue data, travel segments, and warnings.
  * Automatically replaces venues that are closed on the scheduled day/time.
+ * Optimizes route order to minimize zig-zagging within each day.
  */
 export function enrichItinerary(
   days: Array<{ day: number; title: string; items: ItineraryItem[] }>,
   venues: Venue[],
-  tripStartDate?: string
+  tripStartDate?: string,
+  hotelLat?: number,
+  hotelLng?: number,
+  transitPreference?: TransitMode
 ): Array<{ day: number; title: string; items: ItineraryItem[] }> {
   // Track all venue IDs used across the entire itinerary to avoid duplicates
   const usedVenueIds = new Set<string>();
@@ -275,7 +433,10 @@ export function enrichItinerary(
   }
 
   return days.map((day, dayIndex) => {
-    const enrichedItems = day.items.map((item, itemIndex) => {
+    // Optimize geographic order within the day to minimize zig-zagging
+    const optimizedItems = optimizeRouteOrder(day.items, venues, hotelLat, hotelLng);
+
+    const enrichedItems = optimizedItems.map((item, itemIndex) => {
       const enriched = { ...item };
 
       // Match venue from DB
@@ -325,7 +486,7 @@ export function enrichItinerary(
       }
 
       // Calculate travel to next item
-      const nextItem = day.items[itemIndex + 1];
+      const nextItem = optimizedItems[itemIndex + 1];
       if (nextItem) {
         const nextVenue = matchVenue(nextItem.name, venues);
         if (
@@ -334,7 +495,8 @@ export function enrichItinerary(
         ) {
           enriched.travelToNext = estimateTravel(
             enriched.lat, enriched.lng,
-            nextVenue.lat, nextVenue.lng
+            nextVenue.lat, nextVenue.lng,
+            transitPreference
           );
         } else {
           enriched.travelToNext = null;
