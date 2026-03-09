@@ -16,6 +16,52 @@ import { supabase } from "@/lib/supabase";
 
 type View = "form" | "email" | "loading" | "itinerary";
 
+const TAGLINES = [
+  "Checking in?",
+  "Bon voyage, babe.",
+  "Where to next?",
+  "Pack your bags.",
+  "The good stuff awaits.",
+  "Adventure, curated.",
+  "Let\u2019s plan something great.",
+  "Ready when you are.",
+  "Your trip starts here.",
+  "Grab your passport.",
+  "Time to explore.",
+  "Strictly the best.",
+];
+
+function RotatingTagline() {
+  const [index, setIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    // Pick a random starting index
+    setIndex(Math.floor(Math.random() * TAGLINES.length));
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIndex((prev) => (prev + 1) % TAGLINES.length);
+        setVisible(true);
+      }, 400);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <span
+      className={`inline-block transition-opacity duration-300 ${
+        visible ? "opacity-100" : "opacity-0"
+      }`}
+    >
+      {TAGLINES[index]}
+    </span>
+  );
+}
+
 function ConciergeContent() {
   const searchParams = useSearchParams();
   const initialCity = searchParams.get("city") || undefined;
@@ -209,12 +255,11 @@ function ConciergeContent() {
         <section className="pt-36 pb-24 px-6">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-16">
-              <p className="text-xs uppercase tracking-[5px] text-gold font-mono mb-8">
-                Strictly Concierge
+              <p className="font-mono text-secondary text-sm md:text-base tracking-wide mb-6 h-6">
+                <RotatingTagline />
               </p>
-              <h1 className="font-mono text-4xl md:text-5xl font-bold text-brown leading-snug mb-8">
-                Your trip,{" "}
-                <span className="italic">strictly</span> curated.
+              <h1 className="font-mono text-5xl md:text-6xl lg:text-7xl font-bold text-gold leading-[1.05] mb-8">
+                Strictly Concierge
               </h1>
               <p className="font-mono text-secondary text-[15px] leading-relaxed max-w-lg mx-auto">
                 Tell me where you&apos;re going and how you like to travel.
