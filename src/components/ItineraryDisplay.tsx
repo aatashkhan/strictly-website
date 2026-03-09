@@ -240,6 +240,10 @@ export default function ItineraryDisplay({
     item: ItineraryItem;
   } | null>(null);
 
+  // Provide a fallback empty itinerary for the hook when data is null
+  // (hooks must be called unconditionally; the null check happens below in the render)
+  const fallbackData: ItineraryData = data ?? { intro: "", days: [], signoff: "" };
+
   // State management with undo/redo
   const {
     itinerary,
@@ -250,7 +254,7 @@ export default function ItineraryDisplay({
     changeTravelMode,
     undo,
     redo,
-  } = useItineraryState(data!, venues, tripData.arrival?.date);
+  } = useItineraryState(fallbackData, venues, tripData.arrival?.date);
 
   // Compute alternatives for swap drawer
   const swapAlternatives = useMemo(() => {
