@@ -24,8 +24,7 @@ function ConciergeContent() {
   const [tripData, setTripData] = useState<TripFormData | null>(null);
   const [itinerary, setItinerary] = useState<ItineraryData | null>(null);
   const [savedTripId, setSavedTripId] = useState<string | null>(null);
-  const authRequired = searchParams.get("auth") === "required";
-  const [showAuthModal, setShowAuthModal] = useState(authRequired);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const { user } = useUser();
 
   // Get venues for the selected city (needed for swap functionality)
