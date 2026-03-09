@@ -20,6 +20,7 @@ interface ItineraryDisplayProps {
   onBack: () => void;
   onEdit?: () => void;
   onSave?: (currentItinerary?: ItineraryData) => Promise<string | null>;
+  onSignIn?: () => void;
   isSaved?: boolean;
 }
 
@@ -201,6 +202,7 @@ export default function ItineraryDisplay({
   venues,
   onBack,
   onSave,
+  onSignIn,
   isSaved,
   onEdit,
 }: ItineraryDisplayProps) {
@@ -396,7 +398,7 @@ export default function ItineraryDisplay({
             Refine with AI
           </button>
           <ExportButton itinerary={itinerary} tripData={tripData} />
-          {onSave && (
+          {onSave ? (
             <button
               onClick={handleSave}
               disabled={saveStatus === "saving"}
@@ -410,7 +412,14 @@ export default function ItineraryDisplay({
             >
               {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save Trip"}
             </button>
-          )}
+          ) : onSignIn ? (
+            <button
+              onClick={onSignIn}
+              className="px-5 py-2 rounded-full text-sm font-mono border border-gold bg-gold/10 text-gold hover:bg-gold/20 transition-all"
+            >
+              Sign in to save
+            </button>
+          ) : null}
         </div>
       </div>
 

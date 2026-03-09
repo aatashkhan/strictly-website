@@ -4,12 +4,12 @@ import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "./ThemeProvider";
-import { useUser } from "@/lib/auth";
 import AuthButton from "./AuthButton";
 
 const navLinks = [
   { label: "About", href: "/about" },
   { label: "Strictly Concierge", href: "/concierge" },
+  { label: "My Trips", href: "/trips" },
   {
     label: "Substack",
     href: "https://strictlythegoodstuff.substack.com",
@@ -21,7 +21,6 @@ const navLinks = [
 export default function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { theme, toggle } = useTheme();
-  const { user } = useUser();
   const router = useRouter();
 
   const guardedNavigate = useCallback((href: string, e: React.MouseEvent) => {
@@ -67,16 +66,6 @@ export default function Nav() {
                   {link.label}
                 </Link>
               )
-            )}
-
-            {user && (
-              <Link
-                href="/trips"
-                onClick={(e) => guardedNavigate("/trips", e)}
-                className="text-sm font-mono text-secondary hover:text-brown transition-colors"
-              >
-                My Trips
-              </Link>
             )}
 
             {/* Theme toggle */}
@@ -156,16 +145,6 @@ export default function Nav() {
                 {link.label}
               </Link>
             )
-          )}
-
-          {user && (
-            <Link
-              href="/trips"
-              onClick={(e) => { guardedNavigate("/trips", e); setMobileOpen(false); }}
-              className="font-mono text-3xl text-brown hover:text-gold transition-colors"
-            >
-              My Trips
-            </Link>
           )}
 
           {/* Mobile theme toggle */}
