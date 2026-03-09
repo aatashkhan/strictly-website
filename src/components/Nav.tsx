@@ -4,6 +4,8 @@ import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "./ThemeProvider";
+import { useUser } from "@/lib/auth";
+import AuthButton from "./AuthButton";
 
 const navLinks = [
   { label: "About", href: "/about" },
@@ -19,6 +21,7 @@ const navLinks = [
 export default function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { theme, toggle } = useTheme();
+  const { user } = useUser();
   const router = useRouter();
 
   const guardedNavigate = useCallback((href: string, e: React.MouseEvent) => {
@@ -66,6 +69,16 @@ export default function Nav() {
               )
             )}
 
+            {user && (
+              <Link
+                href="/trips"
+                onClick={(e) => guardedNavigate("/trips", e)}
+                className="text-sm font-mono text-secondary hover:text-brown transition-colors"
+              >
+                My Trips
+              </Link>
+            )}
+
             {/* Theme toggle */}
             <button
               onClick={toggle}
@@ -74,6 +87,8 @@ export default function Nav() {
             >
               {theme === "dark" ? "light mode" : "dark mode"}
             </button>
+
+            <AuthButton />
 
             <Link
               href="/concierge"
@@ -143,6 +158,16 @@ export default function Nav() {
             )
           )}
 
+          {user && (
+            <Link
+              href="/trips"
+              onClick={(e) => { guardedNavigate("/trips", e); setMobileOpen(false); }}
+              className="font-mono text-3xl text-brown hover:text-gold transition-colors"
+            >
+              My Trips
+            </Link>
+          )}
+
           {/* Mobile theme toggle */}
           <button
             onClick={toggle}
@@ -150,6 +175,10 @@ export default function Nav() {
           >
             {theme === "dark" ? "switch to light mode" : "switch to dark mode"}
           </button>
+
+          <div className="mt-2">
+            <AuthButton />
+          </div>
 
           <Link
             href="/concierge"

@@ -19,6 +19,8 @@ interface ItineraryDisplayProps {
   venues: Venue[];
   onBack: () => void;
   onEdit?: () => void;
+  onSave?: (currentItinerary?: ItineraryData) => Promise<string | null>;
+  isSaved?: boolean;
 }
 
 function HotelCard({ name, address }: { name: string; address?: string }) {
@@ -198,12 +200,15 @@ export default function ItineraryDisplay({
   tripData,
   venues,
   onBack,
+  onSave,
+  isSaved,
   onEdit,
 }: ItineraryDisplayProps) {
   const [openDays, setOpenDays] = useState<Set<number>>(() => new Set([1]));
   const [chatOpen, setChatOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [copiedDay, setCopiedDay] = useState<number | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(isSaved ? "saved" : "idle");
 
   // Swap drawer state
   const [swapTarget, setSwapTarget] = useState<{
@@ -274,6 +279,14 @@ export default function ItineraryDisplay({
     copyDayToClipboard(day, dayDate);
     setCopiedDay(day.day);
     setTimeout(() => setCopiedDay(null), 2000);
+  };
+
+  const handleSave = async () => {
+    if (!onSave) return;
+    setSaveStatus("saving");
+    const result = await onSave(itinerary);
+    setSaveStatus(result ? "saved" : "idle");
+    if (result) setTimeout(() => setSaveStatus("idle"), 3000);
   };
 
   if (!data) {
@@ -383,6 +396,21 @@ export default function ItineraryDisplay({
             Refine with AI
           </button>
           <ExportButton itinerary={itinerary} tripData={tripData} />
+          {onSave && (
+            <button
+              onClick={handleSave}
+              disabled={saveStatus === "saving"}
+              className={`px-5 py-2 rounded-full text-sm font-mono transition-all ${
+                saveStatus === "saved"
+                  ? "bg-green-600/10 border border-green-600/30 text-green-700"
+                  : saveStatus === "saving"
+                  ? "border border-border text-muted cursor-wait"
+                  : "border border-gold bg-gold/10 text-gold hover:bg-gold/20"
+              }`}
+            >
+              {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save Trip"}
+            </button>
+          )}
         </div>
       </div>
 

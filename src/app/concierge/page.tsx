@@ -11,6 +11,8 @@ import EmailGate from "@/components/EmailGate";
 import { TripFormData, ItineraryData, Venue } from "@/lib/types";
 import { getCityData } from "@/lib/venues";
 import { FEATURED_CITIES } from "@/lib/constants";
+import { useUser } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 type View = "form" | "email" | "loading" | "itinerary";
 
@@ -21,6 +23,8 @@ function ConciergeContent() {
   const [view, setView] = useState<View>("form");
   const [tripData, setTripData] = useState<TripFormData | null>(null);
   const [itinerary, setItinerary] = useState<ItineraryData | null>(null);
+  const [savedTripId, setSavedTripId] = useState<string | null>(null);
+  const { user } = useUser();
 
   // Get venues for the selected city (needed for swap functionality)
   const cityVenues: Venue[] = useMemo(() => {
@@ -89,6 +93,53 @@ function ConciergeContent() {
       setItinerary(null);
       setView("itinerary");
     }
+  };
+
+  const handleSaveTrip = async (currentItinerary?: ItineraryData) => {
+    if (!tripData) return null;
+    const itineraryToSave = currentItinerary || itinerary;
+    if (!itineraryToSave) return null;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+
+    try {
+      if (savedTripId) {
+        // Update existing
+        const res = await fetch(`/api/trips/${savedTripId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ itinerary: itineraryToSave }),
+        });
+        if (res.ok) return savedTripId;
+      } else {
+        // Create new
+        const res = await fetch("/api/trips", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            city: tripData.city,
+            trip_data: tripData,
+            itinerary: itineraryToSave,
+            starts_on: tripData.arrival?.date || null,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSavedTripId(data.id);
+          return data.id;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to save trip:", err);
+    }
+    return null;
   };
 
   // Warn before losing itinerary (browser refresh/close) + set global flag for Nav
@@ -183,6 +234,8 @@ function ConciergeContent() {
             venues={cityVenues}
             onBack={handleBack}
             onEdit={handleEdit}
+            onSave={user ? handleSaveTrip : undefined}
+            isSaved={!!savedTripId}
           />
         </section>
       )}

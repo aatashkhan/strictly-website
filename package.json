@@ -13,9 +13,11 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@supabase/supabase-js": "^2.98.0",
     "dotenv": "^17.3.1",
     "mapbox-gl": "^3.19.1",
     "next": "14.2.35",
+    "next-pwa": "^5.6.0",
     "react": "^18",
     "react-dom": "^18",
     "react-map-gl": "^8.1.0",
