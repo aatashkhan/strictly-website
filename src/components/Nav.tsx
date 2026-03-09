@@ -68,15 +68,6 @@ export default function Nav() {
               )
             )}
 
-            {/* Theme toggle */}
-            <button
-              onClick={toggle}
-              className="px-3 py-1.5 rounded-full border border-border text-xs font-mono text-muted hover:text-brown hover:border-gold transition-colors"
-              aria-label="Toggle theme"
-            >
-              {theme === "dark" ? "light mode" : "dark mode"}
-            </button>
-
             <AuthButton />
 
             <Link
@@ -86,6 +77,14 @@ export default function Nav() {
             >
               Try Concierge &rarr;
             </Link>
+
+            <button
+              onClick={toggle}
+              className="ml-1 text-lg text-muted hover:text-brown transition-colors"
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? "\u2600\uFE0F" : "\uD83C\uDF19"}
+            </button>
           </div>
 
           {/* Mobile hamburger */}
@@ -147,14 +146,6 @@ export default function Nav() {
             )
           )}
 
-          {/* Mobile theme toggle */}
-          <button
-            onClick={toggle}
-            className="px-4 py-2 rounded-full border border-border text-sm font-mono text-muted hover:text-brown transition-colors"
-          >
-            {theme === "dark" ? "switch to light mode" : "switch to dark mode"}
-          </button>
-
           <div className="mt-2">
             <AuthButton />
           </div>
@@ -166,6 +157,14 @@ export default function Nav() {
           >
             Try Concierge &rarr;
           </Link>
+
+          <button
+            onClick={toggle}
+            className="mt-4 text-2xl text-muted hover:text-brown transition-colors"
+            aria-label="Toggle theme"
+          >
+            {theme === "dark" ? "\u2600\uFE0F" : "\uD83C\uDF19"}
+          </button>
         </div>
       )}
     </>
