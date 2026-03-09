@@ -4,6 +4,19 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import type { HotelSelection, Venue } from "@/lib/types";
 import { getCityData } from "@/lib/venues";
 
+/** Haversine distance in km */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const MAX_STAY_DISTANCE_KM = 80; // ~50 miles from city center
+
 interface PlaceResult {
   name: string;
   address: string;
@@ -32,11 +45,6 @@ export default function HotelPicker({
 
   const cityInfo = useMemo(() => getCityData(city), [city]);
 
-  const stayVenues = useMemo(() => {
-    if (!cityInfo) return [];
-    return cityInfo.venues.filter((v) => v.category === "stay" && v.status !== "closed");
-  }, [cityInfo]);
-
   // Get city center from venue coordinates for location-biased hotel search
   const cityCenter = useMemo(() => {
     if (!cityInfo) return null;
@@ -46,6 +54,21 @@ export default function HotelPicker({
     const avgLng = withCoords.reduce((s, v) => s + (v.lng || 0), 0) / withCoords.length;
     return { lat: avgLat, lng: avgLng };
   }, [cityInfo]);
+
+  // Filter stay venues: exclude closed, and exclude any that are too far from city center
+  const stayVenues = useMemo(() => {
+    if (!cityInfo) return [];
+    return cityInfo.venues.filter((v) => {
+      if (v.category !== "stay") return false;
+      if (v.status === "closed") return false;
+      // Distance check: if venue has coords and we have city center, reject if too far
+      if (cityCenter && v.lat && v.lng) {
+        const dist = haversineKm(cityCenter.lat, cityCenter.lng, v.lat, v.lng);
+        if (dist > MAX_STAY_DISTANCE_KM) return false;
+      }
+      return true;
+    });
+  }, [cityInfo, cityCenter]);
 
   // Debounced search
   useEffect(() => {

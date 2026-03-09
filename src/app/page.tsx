@@ -13,17 +13,17 @@ export default function Home() {
       <CityGrid />
 
       {/* Denna Intro Section */}
-      <section className="py-24 px-6">
-        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center gap-12">
+      <section className="py-28 px-6">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center gap-14">
           <div className="w-48 h-48 rounded-full bg-light border border-border flex-shrink-0" />
           <div>
-            <p className="text-sm uppercase tracking-[4px] text-gold mb-4 font-mono">
+            <p className="text-xs uppercase tracking-[5px] text-gold mb-6 font-mono">
               Who is Strictly?
             </p>
-            <h2 className="font-mono text-3xl md:text-4xl font-bold text-brown mb-6">
+            <h2 className="font-mono text-3xl md:text-4xl font-bold text-brown mb-8">
               Hi, I&apos;m Denna.
             </h2>
-            <p className="font-mono text-secondary leading-relaxed mb-4">
+            <p className="font-mono text-secondary leading-[1.8] mb-6">
               I&apos;m a travel and lifestyle curator on a permanent mission to find the
               good stuff — the restaurants worth the wait, the hotels that get every
               detail right, the hidden shops that make a city feel like yours. I share
@@ -41,15 +41,15 @@ export default function Home() {
       </section>
 
       {/* Shop Highlight */}
-      <section className="py-24 px-6 border-t border-border">
+      <section className="py-28 px-6 border-t border-border">
         <div className="max-w-5xl mx-auto text-center">
-          <p className="text-sm uppercase tracking-[4px] text-gold mb-4 font-mono">
+          <p className="text-xs uppercase tracking-[5px] text-gold mb-6 font-mono">
             The Shop
           </p>
-          <h2 className="font-mono text-3xl md:text-4xl font-bold text-brown mb-6">
+          <h2 className="font-mono text-3xl md:text-4xl font-bold text-brown mb-8 leading-snug">
             Curated picks, collabs &amp; the things I&apos;m obsessed with
           </h2>
-          <p className="font-mono text-secondary max-w-lg mx-auto mb-10">
+          <p className="font-mono text-secondary max-w-lg mx-auto mb-12 leading-[1.7]">
             From outfit inspiration to sold-out hat drops to Daily Show collabs —
             shop the things I actually use and love.
           </p>

@@ -206,16 +206,17 @@ function ConciergeContent() {
   return (
     <>
       {view === "form" && (
-        <section className="pt-32 pb-20 px-6">
+        <section className="pt-36 pb-24 px-6">
           <div className="max-w-2xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="text-sm uppercase tracking-[4px] text-gold mb-4 font-mono">
+            <div className="text-center mb-16">
+              <p className="text-xs uppercase tracking-[5px] text-gold font-mono mb-8">
                 Strictly Concierge
               </p>
-              <h1 className="font-mono text-4xl md:text-5xl font-bold text-brown mb-4 leading-tight">
-                Your trip, <span className="italic">strictly</span> curated.
+              <h1 className="font-mono text-4xl md:text-5xl font-bold text-brown leading-snug mb-8">
+                Your trip,{" "}
+                <span className="italic">strictly</span> curated.
               </h1>
-              <p className="font-mono text-secondary max-w-md mx-auto">
+              <p className="font-mono text-secondary text-[15px] leading-relaxed max-w-lg mx-auto">
                 Tell me where you&apos;re going and how you like to travel.
                 I&apos;ll build your perfect itinerary from my personally vetted
                 city guides.

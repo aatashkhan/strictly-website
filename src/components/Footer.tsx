@@ -19,10 +19,10 @@ export default function Footer() {
 
   return (
     <footer className="bg-cream border-t border-border">
-      <div className="max-w-7xl mx-auto px-6 py-16">
+      <div className="max-w-7xl mx-auto px-6 py-20">
         {/* Email signup */}
-        <div className="max-w-md mx-auto text-center mb-12">
-          <h3 className="font-mono text-2xl text-brown mb-4">
+        <div className="max-w-md mx-auto text-center mb-14">
+          <h3 className="font-mono text-2xl text-brown mb-6">
             Get the good stuff in your inbox
           </h3>
           <form onSubmit={handleSubmit} className="flex gap-3">

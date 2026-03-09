@@ -20,17 +20,17 @@ export default function Hero() {
     <section className="min-h-screen flex flex-col items-center justify-center bg-cream px-6 relative overflow-hidden">
       <div className="max-w-3xl text-center">
         {/* Small caps label */}
-        <p className="uppercase text-gold text-xs tracking-[0.3em] font-mono mb-6">
+        <p className="uppercase text-gold text-xs tracking-[0.4em] font-mono mb-8">
           Strictly the Good Stuff
         </p>
 
         {/* Main heading */}
-        <h1 className="font-mono font-bold text-5xl md:text-7xl text-brown leading-tight mb-6">
+        <h1 className="font-mono font-bold text-5xl md:text-7xl text-brown leading-[1.1] mb-8">
           Your next favorite place is waiting.
         </h1>
 
         {/* Subtitle */}
-        <p className="text-secondary font-mono text-lg max-w-lg mx-auto mb-10 leading-relaxed">
+        <p className="text-secondary font-mono text-lg max-w-lg mx-auto mb-12 leading-[1.7]">
           Curated city guides, restaurant picks, and travel itineraries — all
           personally tested and approved.
         </p>
@@ -38,7 +38,7 @@ export default function Hero() {
         {/* CTA */}
         <Link
           href="/concierge"
-          className="inline-block px-8 py-4 bg-gold text-white font-mono text-sm rounded-full hover:bg-gold/90 transition-colors"
+          className="inline-block px-10 py-4 bg-gold text-white font-mono text-sm tracking-wide rounded-full hover:bg-gold/90 transition-colors"
         >
           Plan My Trip &rarr;
         </Link>

@@ -29,15 +29,15 @@ const cards = [
 
 export default function ThreeCards() {
   return (
-    <section className="max-w-6xl mx-auto px-6 py-24">
+    <section className="max-w-6xl mx-auto px-6 py-28">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {cards.map((card) => {
           const inner = (
             <div className="bg-light rounded-2xl p-8 border border-border hover:-translate-y-1 transition-transform duration-300 h-full flex flex-col">
-              <h3 className="font-mono text-2xl text-brown mb-3">
+              <h3 className="font-mono text-2xl text-brown mb-4">
                 {card.heading}
               </h3>
-              <p className="font-mono text-secondary text-sm leading-relaxed mb-6 flex-1">
+              <p className="font-mono text-secondary text-sm leading-[1.7] mb-6 flex-1">
                 {card.description}
               </p>
               <span className="font-mono text-sm text-gold font-medium">

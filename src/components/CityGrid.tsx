@@ -12,8 +12,8 @@ export default function CityGrid() {
   });
 
   return (
-    <section className="max-w-6xl mx-auto px-6 py-24">
-      <h2 className="font-mono text-4xl text-brown text-center mb-12">
+    <section className="max-w-6xl mx-auto px-6 py-28">
+      <h2 className="font-mono text-4xl text-brown text-center mb-14">
         Explore by City
       </h2>
 
