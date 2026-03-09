@@ -5,6 +5,26 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const { searchParams } = new URL(request.url);
+  const shareToken = searchParams.get("share_token");
+
+  // Public access via share token
+  if (shareToken) {
+    const supabase = createServerSupabase();
+    const { data, error } = await supabase
+      .from("trips")
+      .select("city, trip_data, itinerary, starts_on")
+      .eq("id", params.id)
+      .eq("share_token", shareToken)
+      .single();
+
+    if (error || !data) {
+      return NextResponse.json({ error: "Trip not found" }, { status: 404 });
+    }
+    return NextResponse.json(data);
+  }
+
+  // Authenticated access
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
 

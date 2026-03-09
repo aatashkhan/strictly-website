@@ -14,6 +14,23 @@ interface ChatPanelProps {
   itinerary: ItineraryData;
   tripData: TripFormData;
   onUpdate: (itinerary: ItineraryData) => void;
+  completedItems?: string[];
+}
+
+function useGeolocation(enabled: boolean) {
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [enabled]);
+
+  return location;
 }
 
 export default function ChatPanel({
@@ -22,12 +39,14 @@ export default function ChatPanel({
   itinerary,
   tripData,
   onUpdate,
+  completedItems,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const location = useGeolocation(isOpen);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -70,7 +89,12 @@ export default function ChatPanel({
           message: text,
           itinerary,
           tripData,
-          history: updatedMessages.slice(-10), // last 10 messages for context
+          history: updatedMessages.slice(-10),
+          context: {
+            currentLocation: location,
+            currentTime: new Date().toISOString(),
+            completedItems: completedItems || [],
+          },
         }),
       });
 

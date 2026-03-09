@@ -11,6 +11,42 @@ import { supabase } from "@/lib/supabase";
 import { getCityData } from "@/lib/venues";
 import type { TripFormData, ItineraryData, Venue } from "@/lib/types";
 
+function ShareButton({ tripId }: { tripId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    try {
+      const res = await fetch(`/api/trips/${tripId}/share`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (res.ok) {
+        const { shareUrl } = await res.json();
+        await navigator.clipboard.writeText(shareUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      }
+    } catch (err) {
+      console.error("Share failed:", err);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleShare}
+      className={`px-4 py-1.5 rounded-full text-sm font-mono transition-all border ${
+        copied
+          ? "border-green-600/30 text-green-700 bg-green-600/10"
+          : "border-border text-secondary hover:border-gold hover:text-gold"
+      }`}
+    >
+      {copied ? "Link copied!" : "Share"}
+    </button>
+  );
+}
+
 export default function TripDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -138,6 +174,7 @@ export default function TripDetailPage() {
                 Today View
               </Link>
             )}
+            <ShareButton tripId={trip.id} />
           </div>
         </div>
         <ItineraryDisplay

@@ -7,17 +7,24 @@ import type { TripFormData, ItineraryData } from "@/lib/types";
 
 const client = new Anthropic();
 
+interface ChatContext {
+  currentLocation?: { lat: number; lng: number } | null;
+  currentTime?: string;
+  completedItems?: string[];
+}
+
 interface ChatRequest {
   message: string;
   itinerary: ItineraryData;
   tripData: TripFormData;
   history: Array<{ role: "user" | "assistant"; content: string }>;
+  context?: ChatContext;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as ChatRequest;
-    const { message, itinerary, tripData, history } = body;
+    const { message, itinerary, tripData, history, context } = body;
 
     const cityData = getCityData(tripData.city);
     if (!cityData) {
@@ -46,7 +53,14 @@ RULES FOR REFINEMENT:
   2. Then the separator "---JSON---"
   3. Then the complete updated itinerary as raw JSON
 - If the user's request doesn't require itinerary changes (just a question), respond conversationally WITHOUT the JSON section
-- Maintain Denna's voice throughout`;
+- Maintain Denna's voice throughout
+- Support action commands: skip a venue, add a venue, reorder stops, adjust times${
+      context?.currentTime || context?.currentLocation || (context?.completedItems && context.completedItems.length > 0)
+        ? `
+
+LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.currentTime).toLocaleString("en-US", { timeZone: tripData.city.includes("London") ? "Europe/London" : "America/New_York" })}` : ""}${context.currentLocation ? `\nUser location: ${context.currentLocation.lat.toFixed(4)}, ${context.currentLocation.lng.toFixed(4)}` : ""}${context.completedItems && context.completedItems.length > 0 ? `\nCompleted venues today: ${context.completedItems.join(", ")}` : ""}`
+        : ""
+    }`;
 
     // Build message history for multi-turn
     const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
