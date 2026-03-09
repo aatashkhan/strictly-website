@@ -5,10 +5,12 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import Nav from "@/components/Nav";
 import TodayTimeline from "@/components/TodayTimeline";
+import ReminderToast from "@/components/ReminderToast";
 import { useUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { getCityData } from "@/lib/venues";
-import type { TripFormData, ItineraryData, Venue } from "@/lib/types";
+import { scheduleReminders, clearReminders } from "@/lib/notifications";
+import type { TripFormData, ItineraryData, ItineraryItem, Venue } from "@/lib/types";
 
 interface CheckIn {
   id: string;
@@ -29,6 +31,8 @@ export default function TodayPage() {
   } | null>(null);
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [loading, setLoading] = useState(true);
+  const [remindersOn, setRemindersOn] = useState(false);
+  const [activeReminder, setActiveReminder] = useState<{ item: ItineraryItem; minutes: number } | null>(null);
 
   const fetchTrip = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -113,6 +117,20 @@ export default function TodayPage() {
     }
   };
 
+  // Schedule reminders when toggled on
+  useEffect(() => {
+    if (!remindersOn || todayInfo?.status !== "active" || !todayInfo.day) {
+      clearReminders();
+      return;
+    }
+
+    scheduleReminders(todayInfo.day.items, (item, minutes) => {
+      setActiveReminder({ item, minutes });
+    });
+
+    return () => clearReminders();
+  }, [remindersOn, todayInfo]);
+
   if (loading || authLoading) {
     return (
       <main>
@@ -182,6 +200,23 @@ export default function TodayPage() {
             <p className="font-mono text-gold text-sm uppercase tracking-widest mb-4">
               Day {todayInfo.day.day} — {todayInfo.day.title}
             </p>
+            {/* Reminder toggle */}
+            <div className="flex items-center justify-between mb-4 px-1">
+              <span className="text-xs font-mono text-muted">Remind me before each stop</span>
+              <button
+                onClick={() => setRemindersOn(!remindersOn)}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  remindersOn ? "bg-gold" : "bg-border"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                    remindersOn ? "translate-x-5" : ""
+                  }`}
+                />
+              </button>
+            </div>
+
             <TodayTimeline
               day={todayInfo.day}
               dayIndex={todayInfo.dayIndex}
@@ -192,6 +227,15 @@ export default function TodayPage() {
           </>
         )}
       </section>
+
+      {/* Reminder toast */}
+      {activeReminder && (
+        <ReminderToast
+          item={activeReminder.item}
+          minutesUntil={activeReminder.minutes}
+          onDismiss={() => setActiveReminder(null)}
+        />
+      )}
     </main>
   );
 }
