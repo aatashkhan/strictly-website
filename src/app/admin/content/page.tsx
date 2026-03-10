@@ -15,6 +15,7 @@ interface ContentItem {
 }
 
 const SECTION_LABELS: Record<string, string> = {
+  theme: "Theme & Colors",
   hero: "Homepage Hero",
   homepage: "Homepage Sections",
   about: "About Page",
@@ -24,7 +25,7 @@ const SECTION_LABELS: Record<string, string> = {
   email: "Email Template",
 };
 
-const SECTION_ORDER = ["hero", "homepage", "about", "footer", "concierge", "ai_voice", "email"];
+const SECTION_ORDER = ["theme", "hero", "homepage", "about", "footer", "concierge", "ai_voice", "email"];
 
 function ContentField({
   item,
@@ -109,6 +110,162 @@ function ContentField({
           className="w-full px-3 py-2 bg-cream border border-border rounded-lg text-xs font-mono text-brown placeholder:text-muted focus:outline-none focus:border-gold"
         />
       )}
+    </div>
+  );
+}
+
+// ── Theme Editor ──────────────────────────────────────────────
+// Color and font customizer — stored in site_content "theme" section
+
+interface ThemeColor {
+  key: string;
+  label: string;
+  cssVar: string;
+}
+
+const THEME_COLORS: ThemeColor[] = [
+  { key: "color_bg", label: "Background", cssVar: "--color-bg" },
+  { key: "color_text", label: "Text", cssVar: "--color-text" },
+  { key: "color_accent", label: "Accent", cssVar: "--color-accent" },
+  { key: "color_secondary", label: "Secondary Text", cssVar: "--color-secondary" },
+  { key: "color_muted", label: "Muted Text", cssVar: "--color-muted" },
+  { key: "color_border", label: "Borders", cssVar: "--color-border" },
+  { key: "color_surface", label: "Surface / Cards", cssVar: "--color-surface" },
+  { key: "color_eat", label: "Eat Category", cssVar: "--color-eat" },
+  { key: "color_stay", label: "Stay Category", cssVar: "--color-stay" },
+  { key: "color_explore", label: "Explore Category", cssVar: "--color-explore" },
+  { key: "color_shop", label: "Shop Category", cssVar: "--color-shop" },
+  { key: "color_drink", label: "Drink Category", cssVar: "--color-drink" },
+  { key: "color_spa", label: "Spa Category", cssVar: "--color-spa" },
+];
+
+const FONT_OPTIONS = [
+  { value: "Roboto Mono", label: "Roboto Mono (current)" },
+  { value: "DM Sans", label: "DM Sans" },
+  { value: "Inter", label: "Inter" },
+  { value: "Playfair Display", label: "Playfair Display" },
+  { value: "Cormorant Garamond", label: "Cormorant Garamond" },
+  { value: "Lora", label: "Lora" },
+  { value: "Source Code Pro", label: "Source Code Pro" },
+  { value: "Space Mono", label: "Space Mono" },
+  { value: "JetBrains Mono", label: "JetBrains Mono" },
+];
+
+/** Convert "R G B" string to hex */
+function rgbStrToHex(rgb: string): string {
+  const parts = rgb.trim().split(/\s+/).map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return "#888888";
+  return "#" + parts.map((n) => n.toString(16).padStart(2, "0")).join("");
+}
+
+/** Convert hex to "R G B" string */
+function hexToRgbStr(hex: string): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `${r} ${g} ${b}`;
+}
+
+function ThemeEditor({
+  items,
+  onSave,
+}: {
+  items: ContentItem[];
+  onSave: (id: string, value: string) => Promise<void>;
+}) {
+  const getItem = (key: string) => items.find((i) => i.key === key);
+  const getVal = (key: string) => getItem(key)?.value ?? "";
+
+  const handleColorChange = (key: string, hex: string) => {
+    const item = getItem(key);
+    if (!item) return;
+    const rgbStr = hexToRgbStr(hex);
+    onSave(item.id, rgbStr);
+    // Live preview: update CSS variable immediately
+    document.documentElement.style.setProperty(
+      THEME_COLORS.find((c) => c.key === key)?.cssVar ?? "",
+      rgbStr
+    );
+  };
+
+  const handleFontChange = (key: string, font: string) => {
+    const item = getItem(key);
+    if (!item) return;
+    onSave(item.id, font);
+  };
+
+  const bodyFont = getVal("font_body") || "Roboto Mono";
+  const headingFont = getVal("font_heading") || "Cormorant Garamond";
+
+  return (
+    <div className="space-y-6">
+      {/* Colors */}
+      <div>
+        <p className="text-[10px] font-mono text-muted uppercase tracking-widest mb-3">
+          Colors (dark theme)
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {THEME_COLORS.map((tc) => {
+            const val = getVal(tc.key);
+            if (!val) return null;
+            return (
+              <div key={tc.key} className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={rgbStrToHex(val)}
+                  onChange={(e) => handleColorChange(tc.key, e.target.value)}
+                  className="w-8 h-8 rounded-lg border border-border cursor-pointer shrink-0"
+                  style={{ padding: 0 }}
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-mono text-brown truncate">{tc.label}</p>
+                  <p className="text-[10px] font-mono text-muted">{val}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Fonts */}
+      <div>
+        <p className="text-[10px] font-mono text-muted uppercase tracking-widest mb-3">
+          Fonts
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-mono text-brown mb-1 block">Body / UI Font</label>
+            <select
+              value={bodyFont}
+              onChange={(e) => handleFontChange("font_body", e.target.value)}
+              className="w-full px-3 py-2 bg-cream border border-border rounded-lg text-xs font-mono text-brown focus:outline-none focus:border-gold"
+              style={{ fontFamily: bodyFont }}
+            >
+              {FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-mono text-brown mb-1 block">Heading Font</label>
+            <select
+              value={headingFont}
+              onChange={(e) => handleFontChange("font_heading", e.target.value)}
+              className="w-full px-3 py-2 bg-cream border border-border rounded-lg text-xs font-mono text-brown focus:outline-none focus:border-gold"
+              style={{ fontFamily: headingFont }}
+            >
+              {FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-[10px] font-mono text-muted italic">
+        Color changes preview live on this page. Save takes effect site-wide after reloading.
+      </p>
     </div>
   );
 }
@@ -227,6 +384,12 @@ export default function ContentPage() {
     <div className="min-h-screen bg-cream">
       <div className="max-w-3xl mx-auto px-6 py-8">
         <div className="mb-8">
+          <a
+            href="/admin"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-mono text-brown bg-surface border border-border rounded-lg hover:border-gold transition-colors mb-5"
+          >
+            &larr; Back to Admin
+          </a>
           <h1 className="font-serif text-2xl text-brown">Site Content</h1>
           <p className="font-mono text-xs text-muted mt-1">
             Edit all user-facing text. Changes auto-save and take effect immediately.
@@ -256,10 +419,16 @@ export default function ContentPage() {
 
                 {isOpen && (
                   <div className="px-5 pb-4 divide-y divide-border/50">
-                    {items.map((item) => (
-                      <ContentField key={item.id} item={item} onSave={handleSave} />
-                    ))}
-                    {section === "ai_voice" && <VoicePreview items={items} adminFetch={adminFetch} />}
+                    {section === "theme" ? (
+                      <ThemeEditor items={items} onSave={handleSave} />
+                    ) : (
+                      <>
+                        {items.map((item) => (
+                          <ContentField key={item.id} item={item} onSave={handleSave} />
+                        ))}
+                        {section === "ai_voice" && <VoicePreview items={items} adminFetch={adminFetch} />}
+                      </>
+                    )}
                   </div>
                 )}
               </div>

@@ -13,6 +13,23 @@ export function useTheme() {
   return useContext(ThemeContext);
 }
 
+/** CSS variable names that map to site_content theme keys */
+const COLOR_VAR_MAP: Record<string, string> = {
+  color_bg: "--color-bg",
+  color_text: "--color-text",
+  color_accent: "--color-accent",
+  color_secondary: "--color-secondary",
+  color_muted: "--color-muted",
+  color_border: "--color-border",
+  color_surface: "--color-surface",
+  color_eat: "--color-eat",
+  color_stay: "--color-stay",
+  color_explore: "--color-explore",
+  color_shop: "--color-shop",
+  color_drink: "--color-drink",
+  color_spa: "--color-spa",
+};
+
 export default function ThemeProvider({
   children,
 }: {
@@ -26,6 +43,22 @@ export default function ThemeProvider({
       setTheme(saved);
       document.documentElement.setAttribute("data-theme", saved);
     }
+  }, []);
+
+  // Load custom theme colors from site_content API
+  useEffect(() => {
+    fetch("/api/theme")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: Record<string, string> | null) => {
+        if (!data) return;
+        const root = document.documentElement;
+        for (const [key, cssVar] of Object.entries(COLOR_VAR_MAP)) {
+          if (data[key]) {
+            root.style.setProperty(cssVar, data[key]);
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const toggle = () => {

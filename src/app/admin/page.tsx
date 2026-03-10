@@ -164,7 +164,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-cream flex">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-surface flex flex-col shrink-0">
+      <aside className="w-64 h-screen sticky top-0 border-r border-border bg-surface flex flex-col shrink-0">
         <div className="px-4 py-5 border-b border-border">
           <h1 className="font-serif text-xl text-brown">Admin</h1>
           <p className="font-mono text-[10px] text-muted mt-1">{user?.email}</p>
