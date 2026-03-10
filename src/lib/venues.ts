@@ -40,9 +40,11 @@ export async function getCityMetas(): Promise<CityMeta[]> {
   if (citiesErr || !cities) return [];
 
   // Fetch venue counts and neighborhoods per city in one query
+  // Note: Supabase default limit is 1000; we have 1500+ venues so we must request more
   const { data: venueSummary, error: venueErr } = await supabase
     .from("venues")
-    .select("city_id, neighborhood");
+    .select("city_id, neighborhood")
+    .range(0, 4999);
   if (venueErr) console.error("getCityMetas venue query error:", venueErr.message);
 
   const cityStats = new Map<string, { count: number; neighborhoods: Set<string> }>();

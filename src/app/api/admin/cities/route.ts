@@ -18,9 +18,11 @@ export async function GET(request: NextRequest) {
   }
 
   // Get venue counts and needs_review counts per city
+  // Supabase default limit is 1000; we have 1500+ venues
   const { data: venueCounts } = await supabase
     .from("venues")
-    .select("city_id, needs_review");
+    .select("city_id, needs_review")
+    .range(0, 4999);
 
   const cityStats = new Map<string, { total: number; needsReview: number }>();
   for (const v of venueCounts ?? []) {
