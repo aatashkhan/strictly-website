@@ -27,6 +27,7 @@ interface VenueEditorProps {
   onSave: (updates: Record<string, unknown>) => Promise<void>;
   onDelete: () => void;
   onClose: () => void;
+  adminFetch?: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
 const CATEGORIES = ["eat", "drink", "stay", "explore", "shop", "spa"];
@@ -34,7 +35,8 @@ const PRICE_OPTIONS = ["", "$", "$$", "$$$", "$$$$"];
 const STATUS_OPTIONS = ["open", "closed", "temporarily_closed"];
 const ACCESS_OPTIONS = ["public", "private", "members_guests"];
 
-export default function VenueEditor({ venue, onSave, onDelete, onClose }: VenueEditorProps) {
+export default function VenueEditor({ venue, onSave, onDelete, onClose, adminFetch }: VenueEditorProps) {
+  const fetchFn = adminFetch ?? fetch;
   const [name, setName] = useState(venue.name);
   const [category, setCategory] = useState(venue.category);
   const [subcategory, setSubcategory] = useState(venue.subcategory ?? "");
@@ -94,7 +96,7 @@ export default function VenueEditor({ venue, onSave, onDelete, onClose }: VenueE
     formData.append("file", file);
     formData.append("folder", "venues");
 
-    const res = await fetch("/api/admin/upload", { method: "POST", body: formData });
+    const res = await fetchFn("/api/admin/upload", { method: "POST", body: formData });
     if (res.ok) {
       const { url } = await res.json();
       await onSave({ image_url: url });

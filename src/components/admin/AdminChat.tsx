@@ -10,9 +10,11 @@ interface ChatMessage {
 interface AdminChatProps {
   onClose: () => void;
   onRefresh: () => void;
+  adminFetch?: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
-export default function AdminChat({ onClose, onRefresh }: AdminChatProps) {
+export default function AdminChat({ onClose, onRefresh, adminFetch }: AdminChatProps) {
+  const fetchFn = adminFetch ?? fetch;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,7 +40,7 @@ export default function AdminChat({ onClose, onRefresh }: AdminChatProps) {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/admin/chat", {
+      const res = await fetchFn("/api/admin/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

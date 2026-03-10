@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useAdmin } from "../AdminContext";
+import { useAdmin, useAdminFetch } from "../AdminContext";
 
 interface ContentItem {
   id: string;
@@ -113,7 +113,7 @@ function ContentField({
   );
 }
 
-function VoicePreview({ items }: { items: ContentItem[] }) {
+function VoicePreview({ items, adminFetch }: { items: ContentItem[]; adminFetch: (url: string, init?: RequestInit) => Promise<Response> }) {
   const [preview, setPreview] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -122,7 +122,7 @@ function VoicePreview({ items }: { items: ContentItem[] }) {
   const handlePreview = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/preview-voice", {
+      const res = await adminFetch("/api/admin/preview-voice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -167,22 +167,23 @@ function VoicePreview({ items }: { items: ContentItem[] }) {
 
 export default function ContentPage() {
   useAdmin();
+  const adminFetch = useAdminFetch();
   const [sections, setSections] = useState<Record<string, ContentItem[]>>({});
   const [loading, setLoading] = useState(true);
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(["hero"]));
 
   useEffect(() => {
-    fetch("/api/admin/content")
+    adminFetch("/api/admin/content")
       .then((r) => r.json())
       .then((data) => {
         setSections(data.sections ?? {});
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [adminFetch]);
 
   const handleSave = async (id: string, value: string) => {
-    const res = await fetch("/api/admin/content", {
+    const res = await adminFetch("/api/admin/content", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, value }),
@@ -258,7 +259,7 @@ export default function ContentPage() {
                     {items.map((item) => (
                       <ContentField key={item.id} item={item} onSave={handleSave} />
                     ))}
-                    {section === "ai_voice" && <VoicePreview items={items} />}
+                    {section === "ai_voice" && <VoicePreview items={items} adminFetch={adminFetch} />}
                   </div>
                 )}
               </div>

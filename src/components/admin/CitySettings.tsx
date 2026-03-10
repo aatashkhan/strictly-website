@@ -16,7 +16,8 @@ interface CityData {
 
 const TRANSIT_OPTIONS = ["rideshare", "public_transit", "walking_preferred", "rental_car"];
 
-export default function CitySettings({ cityId }: { cityId: string }) {
+export default function CitySettings({ cityId, adminFetch }: { cityId: string; adminFetch?: (url: string, init?: RequestInit) => Promise<Response> }) {
+  const fetchFn = adminFetch ?? fetch;
   const [city, setCity] = useState<CityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -26,7 +27,7 @@ export default function CitySettings({ cityId }: { cityId: string }) {
   const [newVibe, setNewVibe] = useState("");
 
   useEffect(() => {
-    fetch(`/api/admin/cities/${cityId}`)
+    fetchFn(`/api/admin/cities/${cityId}`)
       .then((r) => r.json())
       .then((data) => { setCity(data.city); setLoading(false); })
       .catch(() => setLoading(false));
@@ -37,7 +38,7 @@ export default function CitySettings({ cityId }: { cityId: string }) {
   }
 
   const save = async (updates: Partial<CityData>) => {
-    const res = await fetch(`/api/admin/cities/${cityId}`, {
+    const res = await fetchFn(`/api/admin/cities/${cityId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),

@@ -20,9 +20,11 @@ interface ReviewModeProps {
   city: string | null;
   onClose: () => void;
   onRefresh: () => void;
+  adminFetch?: (url: string, init?: RequestInit) => Promise<Response>;
 }
 
-export default function ReviewMode({ city, onClose, onRefresh }: ReviewModeProps) {
+export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: ReviewModeProps) {
+  const fetchFn = adminFetch ?? fetch;
   const [venues, setVenues] = useState<ReviewVenue[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [note, setNote] = useState("");
@@ -35,7 +37,7 @@ export default function ReviewMode({ city, onClose, onRefresh }: ReviewModeProps
     const params = new URLSearchParams({ needs_review: "true", sort: "name", limit: "500" });
     if (city) params.set("city", city);
 
-    const res = await fetch(`/api/admin/venues?${params}`);
+    const res = await fetchFn(`/api/admin/venues?${params}`);
     const data = await res.json();
     setVenues(data.venues ?? []);
     setCurrentIndex(0);
@@ -57,7 +59,7 @@ export default function ReviewMode({ city, onClose, onRefresh }: ReviewModeProps
 
   const saveAndNext = async () => {
     if (!current) return;
-    await fetch(`/api/admin/venues/${current.id}`, {
+    await fetchFn(`/api/admin/venues/${current.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -89,7 +91,7 @@ export default function ReviewMode({ city, onClose, onRefresh }: ReviewModeProps
 
   const deleteVenue = async () => {
     if (!current) return;
-    await fetch(`/api/admin/venues/${current.id}`, { method: "DELETE" });
+    await fetchFn(`/api/admin/venues/${current.id}`, { method: "DELETE" });
     const updated = venues.filter((_, i) => i !== currentIndex);
     setVenues(updated);
     if (currentIndex >= updated.length) {

@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
-import { AdminCtx } from "./AdminContext";
+import { AdminCtx, useAdminFetch } from "./AdminContext";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
+  const adminFetch = useAdminFetch();
 
   useEffect(() => {
     const check = async () => {
@@ -76,7 +77,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <AdminCtx.Provider value={{ user, isAdmin, loading }}>
+    <AdminCtx.Provider value={{ user, isAdmin, loading, adminFetch }}>
       {children}
     </AdminCtx.Provider>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useAdmin } from "./AdminContext";
+import { useAdmin, useAdminFetch } from "./AdminContext";
 import { supabase } from "@/lib/supabase";
 import { CATEGORY_CONFIG } from "@/lib/constants";
 import AdminChat from "@/components/admin/AdminChat";
@@ -45,6 +45,7 @@ type SortOption = "needs_review_first" | "name" | "category" | "neighborhood" | 
 
 export default function AdminPage() {
   const { user } = useAdmin();
+  const adminFetch = useAdminFetch();
   const [cities, setCities] = useState<CityInfo[]>([]);
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [citySearch, setCitySearch] = useState("");
@@ -66,13 +67,11 @@ export default function AdminPage() {
 
   // Load cities
   useEffect(() => {
-    const token = (supabase as unknown as { auth: { session: () => { data: { session: { access_token: string } | null } } } }).auth?.session?.()?.data?.session?.access_token;
-    void token; // unused for now, we use cookie auth
-    fetch("/api/admin/cities")
+    adminFetch("/api/admin/cities")
       .then((r) => r.json())
       .then((data) => setCities(data.cities ?? []))
       .catch(console.error);
-  }, []);
+  }, [adminFetch]);
 
   // Load venues when city or filters change
   const loadVenues = useCallback(async () => {
@@ -87,7 +86,7 @@ export default function AdminPage() {
     params.set("limit", "200");
 
     try {
-      const res = await fetch(`/api/admin/venues?${params}`);
+      const res = await adminFetch(`/api/admin/venues?${params}`);
       const data = await res.json();
       setVenues(data.venues ?? []);
       setVenueTotal(data.total ?? 0);
@@ -96,14 +95,14 @@ export default function AdminPage() {
     } finally {
       setVenueLoading(false);
     }
-  }, [selectedCity, filterCategory, filterStatus, filterMissing, filterSearch, sort]);
+  }, [selectedCity, filterCategory, filterStatus, filterMissing, filterSearch, sort, adminFetch]);
 
   useEffect(() => {
     loadVenues();
   }, [loadVenues]);
 
   const handleSaveVenue = async (id: string, updates: Record<string, unknown>) => {
-    const res = await fetch(`/api/admin/venues/${id}`, {
+    const res = await adminFetch(`/api/admin/venues/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
@@ -119,7 +118,7 @@ export default function AdminPage() {
 
   const handleAddVenue = async () => {
     if (!selectedCity) return;
-    const res = await fetch("/api/admin/venues", {
+    const res = await adminFetch("/api/admin/venues", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -137,7 +136,7 @@ export default function AdminPage() {
   };
 
   const handleDeleteVenue = async (venue: VenueRow) => {
-    const res = await fetch(`/api/admin/venues/${venue.id}`, { method: "DELETE" });
+    const res = await adminFetch(`/api/admin/venues/${venue.id}`, { method: "DELETE" });
     if (res.ok) {
       setVenues((prev) => prev.filter((v) => v.id !== venue.id));
       if (editingVenue?.id === venue.id) setEditingVenue(null);
@@ -157,6 +156,7 @@ export default function AdminPage() {
         city={selectedCity}
         onClose={() => setReviewMode(false)}
         onRefresh={loadVenues}
+        adminFetch={adminFetch}
       />
     );
   }
@@ -339,7 +339,7 @@ export default function AdminPage() {
         {/* Content area */}
         <div className="flex-1 flex overflow-hidden">
           {tab === "settings" && selectedCity && selectedCityData ? (
-            <CitySettings cityId={selectedCityData.id} />
+            <CitySettings cityId={selectedCityData.id} adminFetch={adminFetch} />
           ) : (
             <>
               {/* Venue list */}
@@ -405,6 +405,7 @@ export default function AdminPage() {
                     onSave={(updates) => handleSaveVenue(editingVenue.id, updates)}
                     onDelete={() => setDeleteTarget(editingVenue)}
                     onClose={() => setEditingVenue(null)}
+                    adminFetch={adminFetch}
                   />
                 </div>
               )}
@@ -418,6 +419,7 @@ export default function AdminPage() {
         <AdminChat
           onClose={() => setChatOpen(false)}
           onRefresh={loadVenues}
+          adminFetch={adminFetch}
         />
       )}
 
