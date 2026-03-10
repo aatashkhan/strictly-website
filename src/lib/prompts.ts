@@ -1,19 +1,44 @@
 import type { TripFormData, CityData, Venue } from "@/lib/types";
 
-export function buildSystemPrompt(): string {
+export interface VoiceSettings {
+  personality?: string;
+  signature_words?: string;
+  words_to_avoid?: string;
+  exclamation_level?: string;
+  obsessed_frequency?: string;
+  example_phrases?: string;
+  signoff?: string;
+}
+
+export function buildSystemPrompt(voice?: VoiceSettings): string {
+  const personality = voice?.personality || "Warm, knowledgeable friend with great taste — conversational but not over-the-top";
+  const sigWords = voice?.signature_words || "strict/strictest,good stuff,grab,bask,chic,honestly,truly";
+  const obsessedFreq = voice?.obsessed_frequency || "sparingly";
+  const signoff = voice?.signoff || "xo";
+  const examplePhrases = voice?.example_phrases || "this place is really special,honestly the best I've had";
+  const exclamationLevel = voice?.exclamation_level || "moderate";
+  const wordsToAvoid = voice?.words_to_avoid;
+
+  const exclamationRules: Record<string, string> = {
+    restrained: "Avoid exclamation marks almost entirely. Keep the tone confident and calm.",
+    moderate: "Single exclamation marks are fine. Only use multiple (!! or !!!) very rarely for genuinely standout moments.",
+    enthusiastic: "Exclamation marks are welcome! Use them freely when excited about a place.",
+  };
+
   return `You are Denna from "Strictly The Good Stuff" — a lifestyle and travel curator with 25K+ Substack subscribers. You're building a personalized travel itinerary.
 
 YOUR VOICE:
-- Warm, knowledgeable friend with great taste — conversational but not over-the-top
-- Use her signature vocabulary naturally: "strict/strictest," "good stuff," "grab," "bask," "chic," "honestly," "truly"
-- Use "obsessed" sparingly — only for things that genuinely deserve it (once or twice per itinerary, not every item)
-- Single exclamation marks are fine. Only use multiple (!! or !!!) very rarely for genuinely standout moments
+- ${personality}
+- Use her signature vocabulary naturally: ${sigWords.split(",").map(w => `"${w.trim()}"`).join(", ")}
+- Use "obsessed" ${obsessedFreq} — ${obsessedFreq === "never" ? "do not use this word at all" : obsessedFreq === "freely" ? "use it when you genuinely feel it" : "only for things that genuinely deserve it (once or twice per itinerary, not every item)"}
+- ${exclamationRules[exclamationLevel] || exclamationRules.moderate}
+${wordsToAvoid ? `- NEVER use these words: ${wordsToAvoid}` : ""}
 - Parenthetical insider tips are great: "(line is long but worth it)", "(go early)"
 - Be honest and specific — name the dish to order, the exact thing to do, what to skip and why
 - Occasional caps for emphasis is fine, but keep it restrained — one or two per day, not every sentence
 - Personal anecdotes when relevant, but brief
-- Sign off with "xo"
-- Tone reference: think of how you'd text a good friend about a place you love — genuine enthusiasm without performing it. More "this place is really special" than "I'm SCREAMING this is THE BEST THING EVER!!!"
+- Sign off with "${signoff}"
+- Tone reference: ${examplePhrases.split(",").map(p => `"${p.trim()}"`).join(", ")}
 
 CRITICAL RULES:
 - ONLY recommend venues from the provided database below. Do not invent places.
@@ -23,6 +48,21 @@ CRITICAL RULES:
 - GROUP venues by neighborhood/proximity each day — minimize cross-city travel. Each day should follow a logical geographic arc.
 - For each venue: name it EXACTLY as listed in the database, say what to get/do, add a tip
 - Keep it feeling personal and warm, not robotic or generic
+
+MEAL TIMING RULES (follow strictly):
+- Breakfast / Coffee: 7:30 AM – 10:00 AM
+- Lunch: 12:00 PM – 2:00 PM
+- Afternoon coffee/snack: 2:30 PM – 4:00 PM
+- Drinks / Aperitivo: 5:00 PM – 7:00 PM
+- Dinner: 7:00 PM – 10:00 PM
+- Late night drinks/food: 10:00 PM – 12:00 AM
+
+SCHEDULING RULES:
+- NEVER schedule shopping, museums, or sightseeing after 9:00 PM unless the venue is specifically nightlife/bar
+- NEVER schedule dinner before 6:00 PM or lunch before 11:30 AM
+- Every full day MUST include at least breakfast, lunch, AND dinner
+- Arrange each day in strict chronological meal order: breakfast → morning activity → lunch → afternoon activity → pre-dinner drinks → dinner → evening drinks/nightlife
+- Partial days (arrival/departure) should include whatever meals fall in the available window
 
 RESPOND IN THIS EXACT JSON FORMAT (no markdown, no backticks, just raw JSON):
 {
@@ -130,22 +170,30 @@ export function buildUserPrompt(
     lines.push("");
   }
 
+  // Filter out private venues; keep members_guests with annotation
+  const availableVenues = cityData.venues.filter(v => v.access !== 'private');
+  const hasPrivateVenues = cityData.venues.length > availableVenues.length;
+
   // Group venues by neighborhood for geographic context
   const byNeighborhood = new Map<string, Venue[]>();
-  for (const venue of cityData.venues) {
+  for (const venue of availableVenues) {
     const hood = venue.neighborhood ?? 'Other';
     if (!byNeighborhood.has(hood)) byNeighborhood.set(hood, []);
     byNeighborhood.get(hood)!.push(venue);
   }
 
-  lines.push(`VENUE DATABASE (${cityData.venues.length} venues — ONLY use these):`);
+  lines.push(`VENUE DATABASE (${availableVenues.length} venues — ONLY use these):`);
   lines.push("Venues are grouped by neighborhood. Plan each day within 1-2 nearby neighborhoods to minimize travel.");
+  if (hasPrivateVenues) {
+    lines.push("Note: Some venues in this city are members-only clubs and have been excluded from recommendations.");
+  }
   lines.push("");
 
   for (const [neighborhood, venues] of Array.from(byNeighborhood.entries())) {
     lines.push(`  === ${neighborhood} ===`);
     for (const venue of venues) {
       let line = `  - ${venue.name} [${venue.category}/${venue.subcategory}]`;
+      if (venue.access === 'members_guests') line += ` (members/guest access only)`;
       if (venue.address) line += ` @ ${venue.address}`;
       if (venue.denna_note) line += `: ${venue.denna_note}`;
       if (venue.opening_hours?.weekday_text?.length) {
@@ -165,16 +213,22 @@ export function buildUserPrompt(
   lines.push("- Check the opening hours above and do NOT schedule a venue when it's closed.");
   lines.push("- Name each venue EXACTLY as listed in the database — do not paraphrase or abbreviate.");
 
-  // Transit preference instructions
-  const transitPref = tripData.transitPreference ?? 'auto';
-  if (transitPref === 'rideshare') {
-    lines.push("- TRANSIT: Traveler prefers Uber/Lyft for all transportation. Do not suggest public transit, subways, or buses. Reference rideshare/car service when mentioning getting between venues.");
-  } else if (transitPref === 'public_transit') {
-    lines.push("- TRANSIT: Traveler prefers public transit (subway, bus, tram). Mention specific transit lines or stops when relevant. Only suggest walking for very short distances.");
-  } else if (transitPref === 'walking_preferred') {
-    lines.push("- TRANSIT: Traveler prefers walking whenever possible. Cluster venues extra tightly by neighborhood. Only suggest a car/rideshare for distances that would take more than 25 minutes to walk.");
-  } else if (transitPref === 'rental_car') {
-    lines.push("- TRANSIT: Traveler has a rental car. Reference driving and mention parking tips when relevant. Don't suggest public transit.");
+  // Transit preference instructions (supports array or single value)
+  const transitPrefRaw = tripData.transitPreference;
+  const transitPrefs: string[] = Array.isArray(transitPrefRaw) ? transitPrefRaw : transitPrefRaw ? [transitPrefRaw] : [];
+
+  const transitInstructions: Record<string, string> = {
+    rideshare: "Traveler prefers Uber/Lyft. Reference rideshare/car service when mentioning getting between venues.",
+    public_transit: "Traveler likes public transit (subway, bus, tram). Mention specific transit lines or stops when relevant.",
+    walking_preferred: "Traveler prefers walking whenever possible. Cluster venues extra tightly by neighborhood. Only suggest a car/rideshare for distances that would take more than 25 minutes to walk.",
+    rental_car: "Traveler has a rental car. Reference driving and mention parking tips when relevant.",
+  };
+
+  if (transitPrefs.length > 0) {
+    const parts = transitPrefs.map(p => transitInstructions[p]).filter(Boolean);
+    if (parts.length > 0) {
+      lines.push(`- TRANSIT: ${parts.join(" Also: ")}`);
+    }
   }
   lines.push("");
 

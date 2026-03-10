@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useMemo, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
@@ -8,112 +8,14 @@ import TripForm from "@/components/TripForm";
 import LoadingScreen from "@/components/LoadingScreen";
 import ItineraryDisplay from "@/components/ItineraryDisplay";
 import EmailGate from "@/components/EmailGate";
+import ConfirmModal from "@/components/ConfirmModal";
 import { TripFormData, ItineraryData, Venue } from "@/lib/types";
-import { getCityData } from "@/lib/venues";
 import { FEATURED_CITIES } from "@/lib/constants";
 import { useUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { TAGLINES } from "@/data/taglines";
 
 type View = "form" | "email" | "loading" | "itinerary";
-
-const TAGLINES = [
-  // Original 12
-  "Checking in?",
-  "Bon voyage, babe.",
-  "Where to next?",
-  "Pack your bags.",
-  "The good stuff awaits.",
-  "Adventure, curated.",
-  "Let\u2019s plan something great.",
-  "Ready when you are.",
-  "Your trip starts here.",
-  "Grab your passport.",
-  "Time to explore.",
-  "Strictly the best.",
-  // Travel excitement
-  "Window or aisle?",
-  "Wheels up.",
-  "New city, who dis?",
-  "Boarding now.",
-  "Passport stamp incoming.",
-  "Takeoff in 3, 2, 1\u2026",
-  "Jet lag is a vibe.",
-  "Touch down, let\u2019s go.",
-  "Next stop: magic.",
-  "Off the beaten path.",
-  // Denna's voice
-  "Only the good stuff.",
-  "Trust the list.",
-  "Denna-approved.",
-  "Strictly curated.",
-  "The strict list awaits.",
-  "Vetted and obsessed.",
-  "I know a place.",
-  "You\u2019re in good hands.",
-  "Consider this handled.",
-  "Leave the planning to me.",
-  // Aspirational / dreamy
-  "Sunset plans, incoming.",
-  "That table is waiting for you.",
-  "Picture this.",
-  "Your dream trip, loaded.",
-  "Somewhere beautiful awaits.",
-  "Wander with intention.",
-  "Chase the golden light.",
-  "A little magic ahead.",
-  "Views for days.",
-  "Blue water calling.",
-  // Cheeky / fun
-  "Your out-of-office starts now.",
-  "Main character energy.",
-  "Plot twist: you deserve this.",
-  "Treat yourself. Strictly.",
-  "No bad trips here.",
-  "Zero FOMO guaranteed.",
-  "Be the friend with the recs.",
-  "Unhinged itinerary incoming.",
-  "Do not disturb.",
-  "Gone exploring, brb.",
-  "Detour? Always.",
-  "Say yes to the trip.",
-  // Seasonal / situational
-  "Rooftop season.",
-  "Golden hour awaits.",
-  "Summer plans, sorted.",
-  "Long weekend energy.",
-  "Holiday mode: on.",
-  "Off-season is underrated.",
-  "Warm weather pending.",
-  "Patio weather, finally.",
-  // Food & drink
-  "Save room for dessert.",
-  "First stop: espresso.",
-  "Dinner reservations, locked.",
-  "Wine list, incoming.",
-  "Order the pasta.",
-  "That cocktail bar, though.",
-  "Brunch is non-negotiable.",
-  "Aperitivo hour awaits.",
-  // Short & punchy
-  "Let\u2019s go.",
-  "This is it.",
-  "Oh, the places.",
-  "Start here.",
-  "So good.",
-  "Big plans.",
-  "Stay gold.",
-  "Go further.",
-  "Bask in it.",
-  "The good life.",
-  "Good taste only.",
-  "You know the vibe.",
-  "Obsessed already.",
-  "Worth the flight.",
-  "Trip of a lifetime.",
-  "Life\u2019s short. Travel more.",
-  "Cabin crew, mood.",
-  "Itinerary loaded.",
-];
 
 function RotatingTagline() {
   const [queue, setQueue] = useState<number[]>([]);
@@ -166,11 +68,25 @@ function ConciergeContent() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const { user } = useUser();
 
-  // Get venues for the selected city (needed for swap functionality)
-  const cityVenues: Venue[] = useMemo(() => {
-    if (!tripData?.city) return [];
-    const cityData = getCityData(tripData.city);
-    return cityData?.venues ?? [];
+  // Get venues and loading tips for the selected city
+  const [cityVenues, setCityVenues] = useState<Venue[]>([]);
+  const [loadingTips, setLoadingTips] = useState<string[]>([]);
+  useEffect(() => {
+    if (!tripData?.city) {
+      setCityVenues([]);
+      setLoadingTips([]);
+      return;
+    }
+    fetch(`/api/venues/${encodeURIComponent(tripData.city)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setCityVenues(data?.venues ?? []);
+        setLoadingTips(data?.loading_tips ?? []);
+      })
+      .catch(() => {
+        setCityVenues([]);
+        setLoadingTips([]);
+      });
   }, [tripData?.city]);
 
   const handleFormSubmit = (data: TripFormData) => {
@@ -188,8 +104,7 @@ function ConciergeContent() {
 
   // QoL 3: Surprise Me — pick a random featured city with sensible defaults
   const handleSurpriseMe = () => {
-    const available = FEATURED_CITIES.filter((c) => getCityData(c) !== null);
-    const randomCity = available[Math.floor(Math.random() * available.length)];
+    const randomCity = FEATURED_CITIES[Math.floor(Math.random() * FEATURED_CITIES.length)];
     const surpriseData: TripFormData = {
       city: randomCity,
       duration: "3",
@@ -321,25 +236,37 @@ function ConciergeContent() {
     }
   }, [hasActiveItinerary]);
 
-  const confirmLeave = useCallback(() => {
-    if (view === "itinerary" && itinerary) {
-      return window.confirm("Are you sure you want to leave? Your itinerary will be lost.");
-    }
-    return true;
-  }, [view, itinerary]);
+  const [confirmAction, setConfirmAction] = useState<"back" | "edit" | null>(null);
 
   const handleBack = () => {
-    if (!confirmLeave()) return;
+    if (view === "itinerary" && itinerary) {
+      setConfirmAction("back");
+      return;
+    }
     setView("form");
     setItinerary(null);
     setTripData(null);
   };
 
   const handleEdit = () => {
-    if (!confirmLeave()) return;
+    if (view === "itinerary" && itinerary) {
+      setConfirmAction("edit");
+      return;
+    }
     setView("form");
     setItinerary(null);
-    // keep tripData so the form can pre-fill
+  };
+
+  const handleConfirmLeave = () => {
+    if (confirmAction === "back") {
+      setView("form");
+      setItinerary(null);
+      setTripData(null);
+    } else if (confirmAction === "edit") {
+      setView("form");
+      setItinerary(null);
+    }
+    setConfirmAction(null);
   };
 
   return (
@@ -382,7 +309,7 @@ function ConciergeContent() {
         />
       )}
 
-      {view === "loading" && <LoadingScreen city={tripData?.city} />}
+      {view === "loading" && <LoadingScreen city={tripData?.city} loadingTips={loadingTips} />}
 
       {view === "itinerary" && tripData && (
         <section className="pt-32 pb-20">
@@ -403,6 +330,14 @@ function ConciergeContent() {
 
       {/* Auth modal triggered from "Sign in to save" button */}
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+
+      {/* Confirm leave modal */}
+      <ConfirmModal
+        isOpen={confirmAction !== null}
+        message="Are you sure you want to leave? Your itinerary will be lost."
+        onConfirm={handleConfirmLeave}
+        onCancel={() => setConfirmAction(null)}
+      />
     </>
   );
 }

@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getCityData } from "@/lib/venues";
 import { buildSystemPrompt } from "@/lib/prompts";
 import { enrichItinerary } from "@/lib/routing";
+import { getSiteContent } from "@/lib/siteContent";
 import type { TripFormData, ItineraryData } from "@/lib/types";
 
 const client = new Anthropic();
@@ -48,6 +49,30 @@ function getCityTimezone(city: string): string {
   return "America/New_York"; // fallback
 }
 
+/**
+ * Try to extract a JSON object from text that might contain markdown code fences
+ * or have the JSON embedded in conversational text.
+ */
+function extractJsonFromText(text: string): string | null {
+  // Try code fence extraction first: ```json ... ``` or ``` ... ```
+  const codeFenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (codeFenceMatch) {
+    const inner = codeFenceMatch[1].trim();
+    if (inner.startsWith('{')) return inner;
+  }
+
+  // Try to find a JSON object by matching outermost braces
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const candidate = text.slice(firstBrace, lastBrace + 1);
+    // Quick sanity check: must have "days" key
+    if (candidate.includes('"days"')) return candidate;
+  }
+
+  return null;
+}
+
 interface ChatContext {
   currentLocation?: { lat: number; lng: number } | null;
   currentTime?: string;
@@ -74,7 +99,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cityData = getCityData(tripData.city);
+    const cityData = await getCityData(tripData.city);
     if (!cityData) {
       return NextResponse.json(
         { error: `City "${tripData.city}" not found.` },
@@ -82,7 +107,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const systemPrompt = `${buildSystemPrompt()}
+    let voiceSettings;
+    try {
+      voiceSettings = await getSiteContent("ai_voice");
+    } catch {
+      voiceSettings = undefined;
+    }
+    const systemPrompt = `${buildSystemPrompt(voiceSettings && Object.keys(voiceSettings).length > 0 ? voiceSettings : undefined)}
 
 You are now in REFINEMENT MODE. The traveler already has an itinerary and wants to modify it.
 
@@ -96,13 +127,20 @@ RULES FOR REFINEMENT:
 - When the user asks for changes, apply them to the current itinerary
 - ONLY use venues from the database above
 - Keep the same JSON format: { "intro": "...", "days": [...], "signoff": "..." }
-- Respond with TWO parts separated by "---JSON---":
-  1. First: a brief, warm conversational response in Denna's voice explaining what you changed (1-3 sentences)
-  2. Then the separator "---JSON---"
-  3. Then the complete updated itinerary as raw JSON
-- If the user's request doesn't require itinerary changes (just a question), respond conversationally WITHOUT the JSON section
 - Maintain Denna's voice throughout
-- Support action commands: skip a venue, add a venue, reorder stops, adjust times${
+- Support action commands: skip a venue, add a venue, reorder stops, adjust times
+
+CRITICAL RESPONSE FORMAT:
+When making changes to the itinerary, your response MUST be in two parts:
+
+PART 1: A brief, warm explanation of what you changed (1-3 sentences in Denna's voice)
+
+PART 2: The separator line, exactly as shown:
+---JSON---
+
+PART 3: The COMPLETE updated itinerary as raw JSON (no markdown, no backticks, just the JSON object)
+
+If you CANNOT or SHOULD NOT make changes (just answering a question), respond conversationally WITHOUT including ---JSON--- at all.${
       context?.currentTime || context?.currentLocation || (context?.completedItems && context.completedItems.length > 0)
         ? `
 
@@ -180,6 +218,38 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
             "\n\n(I couldn\u2019t update the itinerary this time — try rephrasing your request.)",
           updatedItinerary: null,
         });
+      }
+    }
+
+    // Fallback: try to extract JSON even without the separator
+    // The AI might have wrapped it in code fences or just output JSON directly
+    const fallbackJson = extractJsonFromText(text);
+    if (fallbackJson) {
+      try {
+        const parsed = JSON.parse(fallbackJson);
+        if (parsed && Array.isArray(parsed.days) && parsed.days.length > 0 &&
+            parsed.days.every((d: { items?: unknown }) => Array.isArray(d.items))) {
+          const updatedItinerary: ItineraryData = {
+            intro: parsed.intro ?? itinerary.intro,
+            days: parsed.days,
+            signoff: parsed.signoff ?? itinerary.signoff,
+          };
+          const tripStartDate = tripData.arrival?.date ?? undefined;
+          updatedItinerary.days = enrichItinerary(
+            updatedItinerary.days,
+            cityData.venues,
+            tripStartDate
+          );
+          // Extract conversational part (text before JSON)
+          const jsonStart = text.indexOf(fallbackJson);
+          const conversational = jsonStart > 0 ? text.slice(0, jsonStart).replace(/```json?\s*/gi, '').trim() : "";
+          return NextResponse.json({
+            message: conversational || "Done! I've updated your itinerary.",
+            updatedItinerary,
+          });
+        }
+      } catch {
+        // fallback parse failed, treat as conversation
       }
     }
 

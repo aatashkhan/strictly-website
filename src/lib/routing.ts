@@ -29,14 +29,15 @@ function toRad(deg: number): number {
 export function estimateTravel(
   lat1: number, lng1: number,
   lat2: number, lng2: number,
-  transitPreference?: TransitMode
+  transitPreference?: TransitMode | TransitMode[]
 ): TravelSegment {
   const km = haversineKm(lat1, lng1, lat2, lng2);
   // Haversine is straight-line; real walking/driving is ~1.3-1.5x longer
   const realKm = km * 1.4;
 
-  // Determine mode based on preference
-  const mode = resolveTransitMode(realKm, transitPreference);
+  // Determine mode based on preference (use first preference if array)
+  const pref = Array.isArray(transitPreference) ? transitPreference[0] : transitPreference;
+  const mode = resolveTransitMode(realKm, pref);
 
   if (mode === 'walking') {
     const minutes = Math.round((realKm / 5) * 60);
@@ -89,9 +90,63 @@ function resolveTransitMode(realKm: number, preference?: TransitMode): string {
 }
 
 /**
+ * Assign an item to a meal-period bucket based on its scheduled time.
+ * 0 = morning (before 11:30), 1 = midday (11:30-14:30), 2 = afternoon (14:30-17:30),
+ * 3 = evening (17:30-21:00), 4 = night (after 21:00)
+ */
+function getMealPeriod(timeStr: string): number {
+  const parsed = parseTime(timeStr);
+  if (!parsed) return 0;
+  const totalMin = parsed.hours * 60 + parsed.minutes;
+  if (totalMin < 690) return 0;   // before 11:30
+  if (totalMin < 870) return 1;   // 11:30 – 14:30
+  if (totalMin < 1050) return 2;  // 14:30 – 17:30
+  if (totalMin < 1260) return 3;  // 17:30 – 21:00
+  return 4;                        // after 21:00
+}
+
+/**
+ * Nearest-neighbor ordering for a list of items with lat/lng.
+ */
+function nearestNeighborOrder<T extends { lat?: number; lng?: number }>(
+  items: T[],
+  startLat: number,
+  startLng: number
+): T[] {
+  if (items.length <= 1) return items;
+  const ordered: T[] = [];
+  const remaining = [...items];
+  let curLat = startLat;
+  let curLng = startLng;
+
+  while (remaining.length > 0) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      if (remaining[i].lat == null || remaining[i].lng == null) continue;
+      const d = haversineKm(curLat, curLng, remaining[i].lat!, remaining[i].lng!);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    const chosen = remaining.splice(bestIdx, 1)[0];
+    ordered.push(chosen);
+    if (chosen.lat != null && chosen.lng != null) {
+      curLat = chosen.lat!;
+      curLng = chosen.lng!;
+    }
+  }
+
+  return ordered;
+}
+
+/**
  * Optimize the geographic order of items within a day to minimize zig-zagging.
- * Uses nearest-neighbor heuristic starting from an anchor point (hotel or first venue).
- * Preserves arrival/departure items and non-venue items in their original positions.
+ * Uses meal-period-aware nearest-neighbor: items are grouped by time bucket
+ * (morning, midday, afternoon, evening, night), optimized within each bucket,
+ * then stitched back in chronological order. This preserves meal flow while
+ * optimizing geography within each block.
  */
 export function optimizeRouteOrder(
   items: ItineraryItem[],
@@ -101,9 +156,10 @@ export function optimizeRouteOrder(
 ): ItineraryItem[] {
   if (items.length <= 2) return items;
 
-  // Separate items into venue items (reorderable) and fixed items (arrival/departure/free time)
   const fixedTypes = new Set(['arrival', 'departure', 'flight', 'travel', 'check-in', 'check-out']);
-  const indexed: Array<{ item: ItineraryItem; idx: number; lat?: number; lng?: number; fixed: boolean }> = [];
+
+  type IndexedItem = { item: ItineraryItem; idx: number; lat?: number; lng?: number; fixed: boolean; period: number };
+  const indexed: IndexedItem[] = [];
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -126,47 +182,45 @@ export function optimizeRouteOrder(
       }
     }
 
-    indexed.push({ item, idx: i, lat, lng, fixed: isFixed });
+    const period = getMealPeriod(item.time);
+    indexed.push({ item, idx: i, lat, lng, fixed: isFixed, period });
   }
 
-  // Get reorderable items that have coordinates
   const reorderable = indexed.filter(e => !e.fixed && e.lat != null && e.lng != null);
   const fixedItems = indexed.filter(e => e.fixed || (e.lat == null || e.lng == null));
 
   if (reorderable.length <= 2) return items;
 
-  // Nearest-neighbor ordering starting from anchor (hotel) or first item
-  const startLat = anchorLat ?? reorderable[0].lat!;
-  const startLng = anchorLng ?? reorderable[0].lng!;
-
-  const ordered: typeof reorderable = [];
-  const remaining = [...reorderable];
-  let curLat = startLat;
-  let curLng = startLng;
-
-  while (remaining.length > 0) {
-    let bestIdx = 0;
-    let bestDist = Infinity;
-    for (let i = 0; i < remaining.length; i++) {
-      const d = haversineKm(curLat, curLng, remaining[i].lat!, remaining[i].lng!);
-      if (d < bestDist) {
-        bestDist = d;
-        bestIdx = i;
-      }
-    }
-    const chosen = remaining.splice(bestIdx, 1)[0];
-    ordered.push(chosen);
-    curLat = chosen.lat!;
-    curLng = chosen.lng!;
+  // Group reorderable items by meal period
+  const buckets: Map<number, IndexedItem[]> = new Map();
+  for (const entry of reorderable) {
+    if (!buckets.has(entry.period)) buckets.set(entry.period, []);
+    buckets.get(entry.period)!.push(entry);
   }
 
-  // Rebuild the items array: fixed items stay in position, reorderable fill the gaps
-  const result: ItineraryItem[] = [];
+  // Optimize within each bucket, chaining the end of one bucket to the start of the next
+  const orderedAll: IndexedItem[] = [];
+  let curLat = anchorLat ?? reorderable[0].lat!;
+  let curLng = anchorLng ?? reorderable[0].lng!;
 
-  // Put leading fixed items first (arrival, check-in, etc)
-  const leadingFixed: typeof fixedItems = [];
-  const trailingFixed: typeof fixedItems = [];
-  const middleFixed: typeof fixedItems = [];
+  const sortedPeriods = Array.from(buckets.keys()).sort((a, b) => a - b);
+  for (const period of sortedPeriods) {
+    const bucket = buckets.get(period)!;
+    const optimized = nearestNeighborOrder(bucket, curLat, curLng);
+    orderedAll.push(...optimized);
+    // Chain: last item of this bucket becomes start for next
+    const last = optimized[optimized.length - 1];
+    if (last?.lat != null && last?.lng != null) {
+      curLat = last.lat!;
+      curLng = last.lng!;
+    }
+  }
+
+  // Rebuild: leading fixed → ordered → middle fixed → trailing fixed
+  const result: ItineraryItem[] = [];
+  const leadingFixed: IndexedItem[] = [];
+  const trailingFixed: IndexedItem[] = [];
+  const middleFixed: IndexedItem[] = [];
 
   for (const f of fixedItems) {
     if (f.idx === 0 || (f.idx < (reorderable[0]?.idx ?? Infinity))) {
@@ -178,27 +232,12 @@ export function optimizeRouteOrder(
     }
   }
 
-  // Leading fixed items
-  for (const f of leadingFixed.sort((a, b) => a.idx - b.idx)) {
-    result.push(f.item);
-  }
+  for (const f of leadingFixed.sort((a, b) => a.idx - b.idx)) result.push(f.item);
+  for (const o of orderedAll) result.push(o.item);
+  for (const f of middleFixed.sort((a, b) => a.idx - b.idx)) result.push(f.item);
+  for (const f of trailingFixed.sort((a, b) => a.idx - b.idx)) result.push(f.item);
 
-  // Interleave reordered items
-  for (const o of ordered) {
-    result.push(o.item);
-  }
-
-  // Middle fixed items (like free time blocks) go after reorderable
-  for (const f of middleFixed.sort((a, b) => a.idx - b.idx)) {
-    result.push(f.item);
-  }
-
-  // Trailing fixed items
-  for (const f of trailingFixed.sort((a, b) => a.idx - b.idx)) {
-    result.push(f.item);
-  }
-
-  // Reassign times based on original time ordering (preserve the time slots, just reorder venues into them)
+  // Reassign times: preserve original time slots, just reorder venues into them
   const originalTimes = items.map(i => ({ time: i.time, endTime: i.endTime, duration: i.duration }));
   for (let i = 0; i < result.length && i < originalTimes.length; i++) {
     result[i] = { ...result[i], time: originalTimes[i].time, endTime: originalTimes[i].endTime, duration: originalTimes[i].duration };
@@ -409,6 +448,55 @@ function findOpenReplacement(
 }
 
 /**
+ * Soft validation: log warnings for scheduling issues (shop/explore after 9 PM, missing meals).
+ * These are console-only safety nets — the AI should get it right via prompt rules.
+ */
+function validateCategoryTiming(
+  items: ItineraryItem[],
+  dayIndex: number,
+  totalDays: number
+): void {
+  const isPartialDay = dayIndex === 0 || dayIndex === totalDays - 1;
+
+  for (const item of items) {
+    const parsed = parseTime(item.time);
+    if (!parsed) continue;
+    const totalMin = parsed.hours * 60 + parsed.minutes;
+    const type = (item.type ?? '').toLowerCase();
+
+    // Flag shop/explore after 9 PM (unless nightlife/bar)
+    if (totalMin >= 1260 && (type === 'shop' || type === 'explore')) {
+      console.warn(
+        `[Itinerary] Day ${dayIndex + 1}: "${item.name}" (${type}) scheduled at ${item.time} — shop/explore after 9 PM`
+      );
+    }
+  }
+
+  // For full days, check for missing lunch/dinner eat items
+  if (!isPartialDay) {
+    const hasLunch = items.some(item => {
+      const p = parseTime(item.time);
+      if (!p) return false;
+      const min = p.hours * 60 + p.minutes;
+      return (item.type ?? '').toLowerCase() === 'eat' && min >= 690 && min < 870;
+    });
+    const hasDinner = items.some(item => {
+      const p = parseTime(item.time);
+      if (!p) return false;
+      const min = p.hours * 60 + p.minutes;
+      return (item.type ?? '').toLowerCase() === 'eat' && min >= 1080 && min < 1380;
+    });
+
+    if (!hasLunch) {
+      console.warn(`[Itinerary] Day ${dayIndex + 1}: No lunch-window eat item (11:30 AM – 2:30 PM)`);
+    }
+    if (!hasDinner) {
+      console.warn(`[Itinerary] Day ${dayIndex + 1}: No dinner-window eat item (6:00 PM – 11:00 PM)`);
+    }
+  }
+}
+
+/**
  * Enrich itinerary items with venue data, travel segments, and warnings.
  * Automatically replaces venues that are closed on the scheduled day/time.
  * Optimizes route order to minimize zig-zagging within each day.
@@ -419,7 +507,7 @@ export function enrichItinerary(
   tripStartDate?: string,
   hotelLat?: number,
   hotelLng?: number,
-  transitPreference?: TransitMode
+  transitPreference?: TransitMode | TransitMode[]
 ): Array<{ day: number; title: string; items: ItineraryItem[] }> {
   // Track all venue IDs used across the entire itinerary to avoid duplicates
   const usedVenueIds = new Set<string>();
@@ -435,6 +523,9 @@ export function enrichItinerary(
   return days.map((day, dayIndex) => {
     // Optimize geographic order within the day to minimize zig-zagging
     const optimizedItems = optimizeRouteOrder(day.items, venues, hotelLat, hotelLng);
+
+    // 3C: Category-time validation (soft warnings, console only)
+    validateCategoryTiming(optimizedItems, dayIndex, days.length);
 
     const enrichedItems = optimizedItems.map((item, itemIndex) => {
       const enriched = { ...item };

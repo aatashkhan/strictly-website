@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import type { HotelSelection, Venue } from "@/lib/types";
-import { getCityData } from "@/lib/venues";
 
 /** Haversine distance in km */
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -15,7 +14,7 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-const MAX_STAY_DISTANCE_KM = 80; // ~50 miles from city center
+const MAX_STAY_DISTANCE_KM = 80;
 
 interface PlaceResult {
   name: string;
@@ -31,6 +30,107 @@ interface HotelPickerProps {
   onChange: (hotel: HotelSelection | null) => void;
 }
 
+function HotelCard({
+  venue,
+  isSelected,
+  onSelect,
+}: {
+  venue: Venue;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div
+      className={`w-full text-left rounded-xl border transition-all ${
+        isSelected
+          ? "border-stay bg-stay/5"
+          : "border-border hover:border-stay/40 bg-surface"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full text-left px-4 py-3"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-mono text-brown flex-1 truncate">
+            {venue.name}
+          </span>
+          <span className="text-xs font-mono text-muted shrink-0">
+            {[venue.neighborhood, venue.price_indicator]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          <span className="text-[10px] text-muted shrink-0 transition-transform" style={{ transform: expanded ? "rotate(180deg)" : "rotate(0)" }}>
+            ▼
+          </span>
+        </div>
+        {!expanded && venue.denna_note && (
+          <p className="text-xs font-mono text-secondary mt-1 line-clamp-1">
+            {venue.denna_note}
+          </p>
+        )}
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-3 space-y-2">
+          {venue.denna_note && (
+            <p className="text-xs font-mono text-secondary leading-relaxed">
+              {venue.denna_note}
+            </p>
+          )}
+          {venue.image_url && (
+            <img
+              src={venue.image_url}
+              alt={venue.name}
+              className="w-full h-32 object-cover rounded-lg"
+            />
+          )}
+          {venue.address && (
+            <p className="text-[10px] font-mono text-muted">
+              {venue.address}
+            </p>
+          )}
+          <div className="flex items-center gap-3 flex-wrap">
+            {venue.website && (
+              <a
+                href={venue.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-mono text-stay hover:underline"
+              >
+                Website
+              </a>
+            )}
+            {venue.instagram && (
+              <a
+                href={venue.instagram.startsWith("http") ? venue.instagram : `https://instagram.com/${venue.instagram.replace(/^@/, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] font-mono text-stay hover:underline"
+              >
+                Instagram
+              </a>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+            className="w-full px-3 py-2 bg-stay/10 border border-stay/30 text-stay rounded-lg text-xs font-mono hover:bg-stay/20 transition-colors"
+          >
+            {isSelected ? "Selected ✓" : "Select this hotel"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function HotelPicker({
   city,
   value,
@@ -40,35 +140,55 @@ export default function HotelPicker({
   const [suggestions, setSuggestions] = useState<PlaceResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [cityVenues, setCityVenues] = useState<Venue[]>([]);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const cityInfo = useMemo(() => getCityData(city), [city]);
+  // Fetch city venues from API when city changes
+  useEffect(() => {
+    if (!city) {
+      setCityVenues([]);
+      return;
+    }
+    fetch(`/api/venues/${encodeURIComponent(city)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setCityVenues(data?.venues ?? []);
+      })
+      .catch(() => setCityVenues([]));
+  }, [city]);
 
   // Get city center from venue coordinates for location-biased hotel search
   const cityCenter = useMemo(() => {
-    if (!cityInfo) return null;
-    const withCoords = cityInfo.venues.filter((v) => v.lat && v.lng);
+    const withCoords = cityVenues.filter((v) => v.lat && v.lng);
     if (withCoords.length === 0) return null;
     const avgLat = withCoords.reduce((s, v) => s + (v.lat || 0), 0) / withCoords.length;
     const avgLng = withCoords.reduce((s, v) => s + (v.lng || 0), 0) / withCoords.length;
     return { lat: avgLat, lng: avgLng };
-  }, [cityInfo]);
+  }, [cityVenues]);
 
   // Filter stay venues: exclude closed, and exclude any that are too far from city center
   const stayVenues = useMemo(() => {
-    if (!cityInfo) return [];
-    return cityInfo.venues.filter((v) => {
+    return cityVenues.filter((v) => {
       if (v.category !== "stay") return false;
       if (v.status === "closed") return false;
-      // Distance check: if venue has coords and we have city center, reject if too far
       if (cityCenter && v.lat && v.lng) {
         const dist = haversineKm(cityCenter.lat, cityCenter.lng, v.lat, v.lng);
         if (dist > MAX_STAY_DISTANCE_KM) return false;
       }
       return true;
     });
-  }, [cityInfo, cityCenter]);
+  }, [cityVenues, cityCenter]);
+
+  // Split into city hotels vs nearby getaways
+  const cityHotels = useMemo(
+    () => stayVenues.filter((v) => v.subcategory !== "nearby_getaway"),
+    [stayVenues]
+  );
+  const nearbyGetaways = useMemo(
+    () => stayVenues.filter((v) => v.subcategory === "nearby_getaway"),
+    [stayVenues]
+  );
 
   // Debounced search
   useEffect(() => {
@@ -140,7 +260,6 @@ export default function HotelPicker({
 
   if (!city) return null;
 
-  // If a hotel is selected, show the selected state
   if (value) {
     return (
       <div>
@@ -154,7 +273,7 @@ export default function HotelPicker({
               {value.name}
             </p>
             {value.address && (
-              <p className="text-xs font-mono text-muted truncate">
+              <p className="text-xs font-mono text-muted/60 line-clamp-2">
                 {value.address}
               </p>
             )}
@@ -177,7 +296,6 @@ export default function HotelPicker({
         Where are you staying?
       </label>
 
-      {/* Address search input */}
       <div className="relative mb-4">
         <input
           ref={inputRef}
@@ -197,7 +315,6 @@ export default function HotelPicker({
           </span>
         )}
 
-        {/* Suggestions dropdown */}
         {showSuggestions && suggestions.length > 0 && (
           <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-surface border border-border rounded-xl shadow-lg max-h-60 overflow-y-auto">
             {suggestions.map((place) => (
@@ -218,36 +335,37 @@ export default function HotelPicker({
         )}
       </div>
 
-      {/* Denna's picks */}
-      {stayVenues.length > 0 && (
+      {cityHotels.length > 0 && (
         <>
           <p className="text-xs font-mono text-muted uppercase tracking-widest mb-3">
-            Or pick from Denna&apos;s list
+            Denna&apos;s picks in {city}
+          </p>
+          <div className="grid gap-2 mb-4">
+            {cityHotels.map((venue) => (
+              <HotelCard
+                key={venue.id}
+                venue={venue}
+                isSelected={false}
+                onSelect={() => handleSelectVenue(venue)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {nearbyGetaways.length > 0 && (
+        <>
+          <p className="text-xs font-mono text-muted uppercase tracking-widest mb-3">
+            Nearby getaways
           </p>
           <div className="grid gap-2">
-            {stayVenues.map((venue) => (
-              <button
+            {nearbyGetaways.map((venue) => (
+              <HotelCard
                 key={venue.id}
-                type="button"
-                onClick={() => handleSelectVenue(venue)}
-                className="w-full text-left px-4 py-3 rounded-xl border border-border hover:border-stay/40 bg-surface transition-all"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-mono text-brown flex-1 truncate">
-                    {venue.name}
-                  </span>
-                  <span className="text-xs font-mono text-muted shrink-0">
-                    {[venue.neighborhood, venue.price_indicator]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </div>
-                {venue.denna_note && (
-                  <p className="text-xs font-mono text-secondary mt-1 line-clamp-1">
-                    {venue.denna_note}
-                  </p>
-                )}
-              </button>
+                venue={venue}
+                isSelected={false}
+                onSelect={() => handleSelectVenue(venue)}
+              />
             ))}
           </div>
         </>

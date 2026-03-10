@@ -4,14 +4,22 @@ import { useState, useMemo, useEffect } from "react";
 import type { TripFormData, FlightInfo, HotelSelection } from "@/lib/types";
 import { VIBES, COMPANIONS, BUDGETS, PACES, TRANSIT_MODES } from "@/lib/constants";
 import type { TransitMode } from "@/lib/types";
-import { getCities, getCityData } from "@/lib/venues";
 import FlightInput from "./FlightInput";
 import HotelPicker from "./HotelPicker";
+
+export interface CityMeta {
+  city_name: string;
+  country: string;
+  venue_count: number;
+  neighborhoods: string[];
+}
 
 interface TripFormProps {
   onSubmit: (data: TripFormData) => void;
   initialCity?: string;
   initialData?: TripFormData | null;
+  cities?: string[];
+  cityMetas?: CityMeta[];
 }
 
 function getMaxNights(venueCount: number): number {
@@ -27,8 +35,24 @@ function calcNightsFromDates(arrDate: string, depDate: string): number | null {
   return diff > 0 ? diff : null;
 }
 
-export default function TripForm({ onSubmit, initialCity, initialData }: TripFormProps) {
-  const allCities = getCities();
+export default function TripForm({ onSubmit, initialCity, initialData, cities: citiesProp, cityMetas }: TripFormProps) {
+  const [fetchedCities, setFetchedCities] = useState<string[]>([]);
+  const [fetchedMetas, setFetchedMetas] = useState<CityMeta[]>([]);
+
+  // Fetch cities from API if not passed as props
+  useEffect(() => {
+    if (citiesProp && citiesProp.length > 0) return;
+    fetch("/api/venues?detail=meta")
+      .then((r) => r.json())
+      .then((data: CityMeta[]) => {
+        setFetchedCities(data.map((c) => c.city_name).sort());
+        setFetchedMetas(data);
+      })
+      .catch(console.error);
+  }, [citiesProp]);
+
+  const allCities = citiesProp && citiesProp.length > 0 ? citiesProp : fetchedCities;
+  const allMetas = cityMetas && cityMetas.length > 0 ? cityMetas : fetchedMetas;
 
   const [city, setCity] = useState(initialData?.city ?? initialCity ?? "");
   const [citySearch, setCitySearch] = useState(initialData?.city ?? initialCity ?? "");
@@ -42,8 +66,74 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
   const [budget, setBudget] = useState(initialData?.budget ?? "");
   const [pace, setPace] = useState(initialData?.pace ?? "balanced");
   const [notes, setNotes] = useState(initialData?.notes ?? "");
-  const [transitPreference, setTransitPreference] = useState<TransitMode>(initialData?.transitPreference ?? "auto");
+  const [transitPreferences, setTransitPreferences] = useState<TransitMode[]>(() => {
+    const init = initialData?.transitPreference;
+    if (!init) return [];
+    return Array.isArray(init) ? init.filter(t => t !== 'auto') : init === 'auto' ? [] : [init];
+  });
   const [durationError, setDurationError] = useState("");
+  const [cityVibesData, setCityVibesData] = useState<{ customVibes: string[]; categories: Record<string, number> } | null>(null);
+
+  // Fetch city vibes data when city changes
+  useEffect(() => {
+    if (!city) {
+      setCityVibesData(null);
+      return;
+    }
+    fetch(`/api/venues/${encodeURIComponent(city)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setCityVibesData({
+          customVibes: data?.custom_vibes ?? [],
+          categories: data?.categories ?? {},
+        });
+      })
+      .catch(() => setCityVibesData(null));
+  }, [city]);
+
+  // Compute vibes list: custom_vibes from DB, auto-generated from categories, merged with defaults
+  const availableVibes = useMemo(() => {
+    if (!cityVibesData) return VIBES;
+
+    const autoVibes: string[] = [];
+    const cats = cityVibesData.categories;
+    if ((cats.spa ?? 0) > 3) autoVibes.push("Spa & Wellness");
+    if ((cats.drink ?? 0) > 5) autoVibes.push("Wine & Cocktails");
+    if ((cats.explore ?? 0) > 5) autoVibes.push("Sightseeing");
+    if ((cats.shop ?? 0) > 5) autoVibes.push("Boutique Shopping");
+
+    const custom = cityVibesData.customVibes;
+    if (custom.length === 0 && autoVibes.length === 0) return VIBES;
+
+    // Merge: custom vibes + auto vibes + defaults, deduplicated
+    const seen = new Set<string>();
+    const merged: { label: string; emoji: string }[] = [];
+
+    // Custom vibes first
+    for (const v of custom) {
+      if (!seen.has(v)) {
+        seen.add(v);
+        const existing = VIBES.find((d) => d.label === v);
+        merged.push(existing ?? { label: v, emoji: "✨" });
+      }
+    }
+    // Auto vibes
+    for (const v of autoVibes) {
+      if (!seen.has(v)) {
+        seen.add(v);
+        merged.push({ label: v, emoji: v === "Spa & Wellness" ? "🧖‍♀️" : v === "Wine & Cocktails" ? "🍷" : v === "Sightseeing" ? "🏛️" : "🛍️" });
+      }
+    }
+    // Defaults
+    for (const v of VIBES) {
+      if (!seen.has(v.label)) {
+        seen.add(v.label);
+        merged.push(v);
+      }
+    }
+
+    return merged;
+  }, [cityVibesData]);
 
   const filteredCities = useMemo(() => {
     if (!citySearch) return allCities;
@@ -52,11 +142,11 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
     );
   }, [citySearch, allCities]);
 
-  // City venue data for max duration calc
+  // City venue data for max duration calc — from metas (no full venue fetch needed)
   const cityData = useMemo(() => {
     if (!city) return null;
-    return getCityData(city);
-  }, [city]);
+    return allMetas.find((m) => m.city_name === city) ?? null;
+  }, [city, allMetas]);
 
   const maxNights = useMemo(() => {
     if (!cityData) return 7;
@@ -128,7 +218,7 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
       arrival,
       departure,
       hotel,
-      transitPreference,
+      transitPreference: transitPreferences.length > 0 ? transitPreferences : undefined,
     });
   };
 
@@ -164,7 +254,7 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
             }}
             onFocus={() => setShowCityDropdown(true)}
             onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
-            placeholder="Search for a city..."
+            placeholder="Pick a city from our guides..."
             className="w-full px-4 py-3 pr-10 bg-surface border border-border rounded-xl text-sm font-mono text-brown placeholder:text-muted focus:outline-none focus:border-gold transition-colors"
           />
           {city && (
@@ -183,10 +273,15 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
               &times;
             </button>
           )}
-          {showCityDropdown && filteredCities.length > 0 && (
+          {showCityDropdown && (
             <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-surface border border-border rounded-xl shadow-lg max-h-60 overflow-y-auto">
-              {filteredCities.map((c) => {
-                const data = getCityData(c);
+              {filteredCities.length === 0 && citySearch && (
+                <p className="px-4 py-3 text-xs font-mono text-muted">
+                  We don&apos;t have a guide to that city yet. Here&apos;s where we can take you:
+                </p>
+              )}
+              {(filteredCities.length > 0 ? filteredCities : allCities).map((c) => {
+                const meta = allMetas.find((m) => m.city_name === c);
                 return (
                   <button
                     key={c}
@@ -197,7 +292,7 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
                   >
                     <span>{c}</span>
                     <span className="text-xs text-muted">
-                      {data?.venue_count ?? 0} spots
+                      {meta?.venue_count ?? 0} spots
                     </span>
                   </button>
                 );
@@ -288,7 +383,7 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
           Vibes (pick a few)
         </label>
         <div className="flex flex-wrap gap-3">
-          {VIBES.map((v) => (
+          {availableVibes.map((v) => (
             <button
               key={v.label}
               type="button"
@@ -356,30 +451,39 @@ export default function TripForm({ onSubmit, initialCity, initialData }: TripFor
         )}
       </div>
 
-      {/* Transit Preference */}
+      {/* Transit Preference (multi-select) */}
       <div>
         <label className="block uppercase text-xs tracking-widest text-muted font-mono mb-3">
           How do you get around?
         </label>
         <div className="flex flex-wrap gap-3">
-          {TRANSIT_MODES.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setTransitPreference(t.value as TransitMode)}
-              className={`px-5 py-2 rounded-full border text-sm font-mono transition-all ${
-                transitPreference === t.value
-                  ? "bg-brown text-cream border-brown"
-                  : "border-border text-secondary hover:border-gold"
-              }`}
-            >
-              {t.icon} {t.label}
-            </button>
-          ))}
+          {TRANSIT_MODES.map((t) => {
+            const isSelected = transitPreferences.includes(t.value as TransitMode);
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => {
+                  setTransitPreferences((prev) =>
+                    prev.includes(t.value as TransitMode)
+                      ? prev.filter((v) => v !== t.value)
+                      : [...prev, t.value as TransitMode]
+                  );
+                }}
+                className={`px-5 py-2 rounded-full border text-sm font-mono transition-all ${
+                  isSelected
+                    ? "bg-brown text-cream border-brown"
+                    : "border-border text-secondary hover:border-gold"
+                }`}
+              >
+                {t.icon} {t.label}
+              </button>
+            );
+          })}
         </div>
-        {transitPreference && (
+        {transitPreferences.length > 0 && (
           <p className="mt-2 text-xs font-mono text-muted">
-            {TRANSIT_MODES.find((t) => t.value === transitPreference)?.desc}
+            {transitPreferences.map((v) => TRANSIT_MODES.find((t) => t.value === v)?.desc).filter(Boolean).join(" + ")}
           </p>
         )}
       </div>

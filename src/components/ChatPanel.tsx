@@ -44,6 +44,7 @@ export default function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showUpdated, setShowUpdated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const location = useGeolocation(isOpen);
@@ -109,6 +110,8 @@ export default function ChatPanel({
 
       if (data.updatedItinerary) {
         onUpdate(data.updatedItinerary);
+        setShowUpdated(true);
+        setTimeout(() => setShowUpdated(false), 2500);
       }
     } catch {
       setMessages((prev) => [
@@ -159,6 +162,13 @@ export default function ChatPanel({
             &times;
           </button>
         </div>
+
+        {/* Update confirmation toast */}
+        {showUpdated && (
+          <div className="mx-6 mt-2 px-4 py-2 bg-green-600/10 border border-green-600/30 rounded-xl text-center">
+            <p className="text-xs font-mono text-green-700">Itinerary updated!</p>
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">

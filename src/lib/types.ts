@@ -27,6 +27,8 @@ export interface Venue {
   opening_hours: VenueOpeningHours | null;
   google_maps_url: string | null;
   geocode_status: 'verified' | 'unverified' | 'not_found';
+  image_url?: string | null;
+  access?: 'public' | 'private' | 'members_guests';
   status?: 'open' | 'closed' | 'temporarily_closed';
   status_note?: string;
 }
@@ -40,6 +42,10 @@ export interface CityData {
   neighborhoods: string[];
   categories: Record<string, number>;
   venues: Venue[];
+  // Extended fields from Supabase
+  recommended_transit?: string[];
+  loading_tips?: string[];
+  custom_vibes?: string[];
 }
 
 export interface VenueDB {
@@ -83,7 +89,7 @@ export interface TripFormData {
   arrival: FlightInfo | null;
   departure: FlightInfo | null;
   hotel: HotelSelection | null;
-  transitPreference?: TransitMode;
+  transitPreference?: TransitMode | TransitMode[];
 }
 
 export interface TravelSegment {

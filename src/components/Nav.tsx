@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "./ThemeProvider";
 import AuthButton from "./AuthButton";
+import ConfirmModal from "./ConfirmModal";
 
 const navLinks = [
   { label: "About", href: "/about" },
@@ -23,18 +24,25 @@ export default function Nav() {
   const { theme, toggle } = useTheme();
   const router = useRouter();
 
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
   const guardedNavigate = useCallback((href: string, e: React.MouseEvent) => {
     // Don't guard My Trips — it either opens auth modal or goes to saved trips
     if (href === "/trips") return;
     const hasItinerary = (window as unknown as Record<string, boolean>).__strictlyHasItinerary;
     if (hasItinerary) {
       e.preventDefault();
-      if (window.confirm("Are you sure you want to leave? Your itinerary will be lost.")) {
-        (window as unknown as Record<string, boolean>).__strictlyHasItinerary = false;
-        router.push(href);
-      }
+      setPendingHref(href);
     }
-  }, [router]);
+  }, []);
+
+  const handleConfirmNav = useCallback(() => {
+    if (pendingHref) {
+      (window as unknown as Record<string, boolean>).__strictlyHasItinerary = false;
+      router.push(pendingHref);
+      setPendingHref(null);
+    }
+  }, [pendingHref, router]);
 
   return (
     <>
@@ -169,6 +177,13 @@ export default function Nav() {
           </button>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={pendingHref !== null}
+        message="Are you sure you want to leave? Your itinerary will be lost."
+        onConfirm={handleConfirmNav}
+        onCancel={() => setPendingHref(null)}
+      />
     </>
   );
 }

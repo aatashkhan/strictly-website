@@ -67,7 +67,6 @@ export const PACES = [
 ];
 
 export const TRANSIT_MODES = [
-  { value: "auto", label: "Auto", icon: "\u2728", desc: "Best option per segment" },
   { value: "rideshare", label: "Rideshare", icon: "\u{1F697}", desc: "Uber/Lyft everywhere" },
   { value: "public_transit", label: "Transit", icon: "\u{1F687}", desc: "Subway, bus, tram" },
   { value: "walking_preferred", label: "Walking", icon: "\u{1F6B6}", desc: "Walk when possible, rideshare when far" },

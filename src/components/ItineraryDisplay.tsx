@@ -34,12 +34,91 @@ function HotelCard({ name, address }: { name: string; address?: string }) {
         </p>
         <p className="text-sm font-mono text-brown font-medium">{name}</p>
         {address && (
-          <p className="text-xs font-mono text-muted truncate">{address}</p>
+          <p className="text-xs font-mono text-muted/60 line-clamp-2">{address}</p>
         )}
       </div>
       <span className="ml-auto inline-block px-2 py-0.5 text-[10px] uppercase tracking-wider font-mono rounded-full border bg-stay/10 border-stay/30 text-stay shrink-0">
         Stay
       </span>
+    </div>
+  );
+}
+
+interface ActionBarProps {
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => void;
+  redo: () => void;
+  onRefine: () => void;
+  itinerary: ItineraryData;
+  tripData: TripFormData;
+  onSave?: (currentItinerary?: ItineraryData) => Promise<string | null>;
+  onSignIn?: () => void;
+  handleSave: () => void;
+  saveStatus: string;
+}
+
+function ActionBar({ canUndo, canRedo, undo, redo, onRefine, itinerary, tripData, onSave, onSignIn, handleSave, saveStatus }: ActionBarProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={undo}
+          disabled={!canUndo}
+          className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
+            canUndo
+              ? "text-secondary hover:text-brown hover:bg-surface"
+              : "text-muted/40 cursor-not-allowed"
+          }`}
+          title="Undo last change"
+        >
+          Undo
+        </button>
+        <button
+          onClick={redo}
+          disabled={!canRedo}
+          className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
+            canRedo
+              ? "text-secondary hover:text-brown hover:bg-surface"
+              : "text-muted/40 cursor-not-allowed"
+          }`}
+          title="Redo"
+        >
+          Redo
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={onRefine}
+          className="px-5 py-2 rounded-full border border-border text-sm font-mono text-secondary hover:border-gold hover:text-brown transition-all whitespace-nowrap"
+        >
+          Refine with AI
+        </button>
+        <ExportButton itinerary={itinerary} tripData={tripData} />
+        {onSave ? (
+          <button
+            onClick={handleSave}
+            disabled={saveStatus === "saving"}
+            className={`px-5 py-2 rounded-full text-sm font-mono transition-all whitespace-nowrap ${
+              saveStatus === "saved"
+                ? "bg-green-600/10 border border-green-600/30 text-green-700"
+                : saveStatus === "saving"
+                ? "border border-border text-muted cursor-wait"
+                : "border border-gold bg-gold/10 text-gold hover:bg-gold/20"
+            }`}
+          >
+            {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save Trip"}
+          </button>
+        ) : onSignIn ? (
+          <button
+            onClick={onSignIn}
+            className="px-5 py-2 rounded-full text-sm font-mono border border-gold bg-gold/10 text-gold hover:bg-gold/20 transition-all whitespace-nowrap"
+          >
+            Save
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -388,74 +467,24 @@ export default function ItineraryDisplay({
       </div>
 
       {/* Action bar: undo/redo, chat, export */}
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={undo}
-            disabled={!canUndo}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
-              canUndo
-                ? "text-secondary hover:text-brown hover:bg-surface"
-                : "text-muted/40 cursor-not-allowed"
-            }`}
-            title="Undo last change"
-          >
-            Undo
-          </button>
-          <button
-            onClick={redo}
-            disabled={!canRedo}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
-              canRedo
-                ? "text-secondary hover:text-brown hover:bg-surface"
-                : "text-muted/40 cursor-not-allowed"
-            }`}
-            title="Redo"
-          >
-            Redo
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setChatOpen(true)}
-            className="px-5 py-2 rounded-full border border-border text-sm font-mono text-secondary hover:border-gold hover:text-brown transition-all"
-          >
-            Refine with AI
-          </button>
-          <ExportButton itinerary={itinerary} tripData={tripData} />
-          {onSave ? (
-            <button
-              onClick={handleSave}
-              disabled={saveStatus === "saving"}
-              className={`px-5 py-2 rounded-full text-sm font-mono transition-all ${
-                saveStatus === "saved"
-                  ? "bg-green-600/10 border border-green-600/30 text-green-700"
-                  : saveStatus === "saving"
-                  ? "border border-border text-muted cursor-wait"
-                  : "border border-gold bg-gold/10 text-gold hover:bg-gold/20"
-              }`}
-            >
-              {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save Trip"}
-            </button>
-          ) : onSignIn ? (
-            <button
-              onClick={onSignIn}
-              className="px-5 py-2 rounded-full text-sm font-mono border border-gold bg-gold/10 text-gold hover:bg-gold/20 transition-all"
-            >
-              Sign in to save
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <ActionBar
+        canUndo={canUndo}
+        canRedo={canRedo}
+        undo={undo}
+        redo={redo}
+        onRefine={() => setChatOpen(true)}
+        itinerary={itinerary}
+        tripData={tripData}
+        onSave={onSave}
+        onSignIn={onSignIn}
+        handleSave={handleSave}
+        saveStatus={saveStatus}
+      />
 
       {/* Intro */}
       <p className="font-mono text-secondary leading-relaxed mb-12 text-center max-w-lg mx-auto">
         {itinerary.intro}
       </p>
-
-      {/* Full trip overview map */}
-      <FullTripMap data={itinerary} hotel={tripData.hotel} />
 
       {/* Hotel card */}
       {tripData.hotel && (
@@ -628,12 +657,12 @@ export default function ItineraryDisplay({
                                     : "bg-surface border-border text-secondary hover:border-gold hover:text-gold"
                                 }`}
                               >
-                                <span>{isExpanded ? "Hide details" : "Hours, maps & links"}</span>
+                                <span>{isExpanded ? "Hide details" : "Details"}</span>
                                 <span className="text-[9px]">{isExpanded ? "\u25B4" : "\u25BE"}</span>
                               </button>
                             )}
                             {item.address && (
-                              <p className="text-[11px] font-mono text-muted mb-1 truncate">
+                              <p className="text-[11px] font-mono text-muted/60 mb-1 line-clamp-2">
                                 {item.address}
                               </p>
                             )}
@@ -707,6 +736,29 @@ export default function ItineraryDisplay({
         <p className="font-mono text-gold text-lg leading-relaxed max-w-md mx-auto">
           {itinerary.signoff}
         </p>
+      </div>
+
+      {/* Full trip overview map */}
+      <div className="mt-12">
+        <h3 className="font-serif text-xl text-brown text-center mb-4">Your Full Trip Map</h3>
+        <FullTripMap data={itinerary} hotel={tripData.hotel} />
+      </div>
+
+      {/* Bottom action bar */}
+      <div className="mt-12">
+        <ActionBar
+          canUndo={canUndo}
+          canRedo={canRedo}
+          undo={undo}
+          redo={redo}
+          onRefine={() => setChatOpen(true)}
+          itinerary={itinerary}
+          tripData={tripData}
+          onSave={onSave}
+          onSignIn={onSignIn}
+          handleSave={handleSave}
+          saveStatus={saveStatus}
+        />
       </div>
 
       {/* Footer note */}

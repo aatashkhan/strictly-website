@@ -2,14 +2,16 @@ import Link from "next/link";
 import { FEATURED_CITIES } from "@/lib/constants";
 import { getCityData } from "@/lib/venues";
 
-export default function CityGrid() {
-  const cities = FEATURED_CITIES.map((name) => {
-    const data = getCityData(name);
-    return {
-      name,
-      venueCount: data?.venue_count ?? 0,
-    };
-  });
+export default async function CityGrid() {
+  const cities = await Promise.all(
+    FEATURED_CITIES.map(async (name) => {
+      const data = await getCityData(name);
+      return {
+        name,
+        venueCount: data?.venue_count ?? 0,
+      };
+    })
+  );
 
   return (
     <section className="max-w-6xl mx-auto px-6 py-28">

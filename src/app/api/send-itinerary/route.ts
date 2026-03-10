@@ -8,8 +8,8 @@ function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
 }
 
-function buildEmailHtml(itinerary: ItineraryData, tripData: TripFormData): string {
-  const cityData = getCityData(tripData.city);
+async function buildEmailHtml(itinerary: ItineraryData, tripData: TripFormData): Promise<string> {
+  const cityData = await getCityData(tripData.city);
   const venues = cityData?.venues ?? [];
   const venueMap = new Map(venues.map((v) => [v.id, v]));
 
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const html = buildEmailHtml(itinerary, tripData);
+    const html = await buildEmailHtml(itinerary, tripData);
 
     await resend.emails.send({
       from: "Strictly Concierge <concierge@strictlythegoodstuff.com>",

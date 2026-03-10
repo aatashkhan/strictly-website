@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Nav from "@/components/Nav";
@@ -8,7 +8,6 @@ import Footer from "@/components/Footer";
 import ItineraryDisplay from "@/components/ItineraryDisplay";
 import { useUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { getCityData } from "@/lib/venues";
 import type { TripFormData, ItineraryData, Venue } from "@/lib/types";
 
 function ShareButton({ tripId }: { tripId: string }) {
@@ -100,10 +99,14 @@ export default function TripDetailPage() {
     };
   }, []);
 
-  const cityVenues: Venue[] = useMemo(() => {
-    if (!trip?.city) return [];
-    const cityData = getCityData(trip.city);
-    return cityData?.venues ?? [];
+  const [cityVenues, setCityVenues] = useState<Venue[]>([]);
+
+  useEffect(() => {
+    if (!trip?.city) return;
+    fetch(`/api/venues/${encodeURIComponent(trip.city)}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => setCityVenues(data?.venues ?? []))
+      .catch(() => setCityVenues([]));
   }, [trip?.city]);
 
   // Debounced auto-save

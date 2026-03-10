@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getCityData } from "@/lib/venues";
 import { buildSystemPrompt, buildUserPrompt } from "@/lib/prompts";
 import { enrichItinerary } from "@/lib/routing";
+import { getSiteContent } from "@/lib/siteContent";
 import type { TripFormData, ItineraryData } from "@/lib/types";
 
 const client = new Anthropic();
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
       storeEmail(email, city);
     }
 
-    const cityData = getCityData(city);
+    const cityData = await getCityData(city);
     if (!cityData) {
       return NextResponse.json(
         { error: `City "${city}" not found in our database.` },
@@ -54,7 +55,14 @@ export async function POST(request: NextRequest) {
     const activeVenues = cityData.venues.filter(v => v.status !== 'closed');
     const activeCityData = { ...cityData, venues: activeVenues, venue_count: activeVenues.length };
 
-    const systemPrompt = buildSystemPrompt();
+    // Load voice settings from database (falls back to defaults if table doesn't exist)
+    let voiceSettings;
+    try {
+      voiceSettings = await getSiteContent("ai_voice");
+    } catch {
+      voiceSettings = undefined;
+    }
+    const systemPrompt = buildSystemPrompt(voiceSettings && Object.keys(voiceSettings).length > 0 ? voiceSettings : undefined);
     const userPrompt = buildUserPrompt(body, activeCityData);
 
     const message = await client.messages.create({

@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
-import { getCityData } from "@/lib/venues";
 import { CATEGORY_CONFIG } from "@/lib/constants";
 import type { TripFormData, ItineraryData, ItineraryItem, Venue } from "@/lib/types";
 import dynamic from "next/dynamic";
@@ -51,16 +50,17 @@ export default function SharedTripPage() {
     }
   }, [params.id, token]);
 
-  const cityVenues: Venue[] = useMemo(() => {
-    if (!trip?.city) return [];
-    return getCityData(trip.city)?.venues ?? [];
+  const [cityVenues, setCityVenues] = useState<Venue[]>([]);
+
+  useEffect(() => {
+    if (!trip?.city) return;
+    fetch(`/api/venues/${encodeURIComponent(trip.city)}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => setCityVenues(data?.venues ?? []))
+      .catch(() => setCityVenues([]));
   }, [trip?.city]);
 
-  const venueById = useMemo(() => {
-    const map = new Map<string, Venue>();
-    for (const v of cityVenues) map.set(v.id, v);
-    return map;
-  }, [cityVenues]);
+  const venueById = new Map<string, Venue>(cityVenues.map((v) => [v.id, v]));
 
   const toggleDay = (day: number) => {
     setOpenDays((prev) => {

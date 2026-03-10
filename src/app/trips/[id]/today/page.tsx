@@ -8,7 +8,6 @@ import TodayTimeline from "@/components/TodayTimeline";
 import ReminderToast from "@/components/ReminderToast";
 import { useUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { getCityData } from "@/lib/venues";
 import { scheduleReminders, clearReminders } from "@/lib/notifications";
 import type { TripFormData, ItineraryData, ItineraryItem, Venue } from "@/lib/types";
 
@@ -62,9 +61,14 @@ export default function TodayPage() {
     else if (!authLoading) setLoading(false);
   }, [user, authLoading, fetchTrip]);
 
-  const cityVenues: Venue[] = useMemo(() => {
-    if (!trip?.city) return [];
-    return getCityData(trip.city)?.venues ?? [];
+  const [cityVenues, setCityVenues] = useState<Venue[]>([]);
+
+  useEffect(() => {
+    if (!trip?.city) return;
+    fetch(`/api/venues/${encodeURIComponent(trip.city)}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => setCityVenues(data?.venues ?? []))
+      .catch(() => setCityVenues([]));
   }, [trip?.city]);
 
   // Determine which day "today" is
