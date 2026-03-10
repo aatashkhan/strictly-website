@@ -39,16 +39,27 @@ export async function getCityMetas(): Promise<CityMeta[]> {
     .order("city_name");
   if (citiesErr || !cities) return [];
 
-  // Fetch venue counts and neighborhoods per city in one query
-  // Note: Supabase default limit is 1000; we have 1500+ venues so we must request more
-  const { data: venueSummary, error: venueErr } = await supabase
-    .from("venues")
-    .select("city_id, neighborhood")
-    .range(0, 4999);
-  if (venueErr) console.error("getCityMetas venue query error:", venueErr.message);
+  // Fetch ALL venue data — paginate because Supabase caps at 1000 rows per request
+  const allVenues: { city_id: string; neighborhood: string | null }[] = [];
+  const PAGE_SIZE = 1000;
+  let offset = 0;
+  while (true) {
+    const { data, error: venueErr } = await supabase
+      .from("venues")
+      .select("city_id, neighborhood")
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (venueErr) {
+      console.error("getCityMetas venue query error:", venueErr.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    allVenues.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
 
   const cityStats = new Map<string, { count: number; neighborhoods: Set<string> }>();
-  for (const v of venueSummary ?? []) {
+  for (const v of allVenues) {
     if (!cityStats.has(v.city_id)) {
       cityStats.set(v.city_id, { count: 0, neighborhoods: new Set() });
     }

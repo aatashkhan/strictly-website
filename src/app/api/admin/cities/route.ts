@@ -17,15 +17,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Get venue counts and needs_review counts per city
-  // Supabase default limit is 1000; we have 1500+ venues
-  const { data: venueCounts } = await supabase
-    .from("venues")
-    .select("city_id, needs_review")
-    .range(0, 4999);
+  // Get venue counts — paginate because Supabase caps at 1000 rows per request
+  const allVenues: any[] = [];
+  const PAGE_SIZE = 1000;
+  let offset = 0;
+  while (true) {
+    const { data } = await supabase
+      .from("venues")
+      .select("city_id, needs_review")
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (!data || data.length === 0) break;
+    allVenues.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
 
   const cityStats = new Map<string, { total: number; needsReview: number }>();
-  for (const v of venueCounts ?? []) {
+  for (const v of allVenues) {
     if (!cityStats.has(v.city_id)) {
       cityStats.set(v.city_id, { total: 0, needsReview: 0 });
     }
