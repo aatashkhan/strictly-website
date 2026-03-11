@@ -36,6 +36,7 @@ interface VenueRow {
   google_maps_url?: string | null;
   instagram?: string | null;
   website?: string | null;
+  city_id?: string;
   cities?: { city_name: string; country: string };
   [key: string]: unknown;
 }
@@ -57,6 +58,13 @@ export default function AdminPage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<VenueRow | null>(null);
+  const [deleteCityTarget, setDeleteCityTarget] = useState<CityInfo | null>(null);
+
+  // Add city modal
+  const [showAddCity, setShowAddCity] = useState(false);
+  const [newCityName, setNewCityName] = useState("");
+  const [newCityCountry, setNewCityCountry] = useState("");
+  const [newCityRegion, setNewCityRegion] = useState("");
 
   // Filters
   const [filterCategory, setFilterCategory] = useState("");
@@ -66,12 +74,19 @@ export default function AdminPage() {
   const [sort, setSort] = useState<SortOption>("needs_review_first");
 
   // Load cities
-  useEffect(() => {
-    adminFetch("/api/admin/cities")
-      .then((r) => r.json())
-      .then((data) => setCities(data.cities ?? []))
-      .catch(console.error);
+  const loadCities = useCallback(async () => {
+    try {
+      const r = await adminFetch("/api/admin/cities");
+      const data = await r.json();
+      setCities(data.cities ?? []);
+    } catch (e) {
+      console.error("Failed to load cities:", e);
+    }
   }, [adminFetch]);
+
+  useEffect(() => {
+    loadCities();
+  }, [loadCities]);
 
   // Load venues when city or filters change
   const loadVenues = useCallback(async () => {
@@ -109,9 +124,17 @@ export default function AdminPage() {
     });
     if (res.ok) {
       const { venue } = await res.json();
-      setVenues((prev) => prev.map((v) => (v.id === id ? { ...v, ...venue } : v)));
-      if (editingVenue?.id === id) {
-        setEditingVenue((prev) => prev ? { ...prev, ...venue } : null);
+      // If city_id changed, the venue may no longer belong to the selected city filter
+      if (updates.city_id && updates.city_id !== editingVenue?.city_id) {
+        // Reload venues and city counts
+        loadVenues();
+        loadCities();
+        setEditingVenue(null);
+      } else {
+        setVenues((prev) => prev.map((v) => (v.id === id ? { ...v, ...venue } : v)));
+        if (editingVenue?.id === id) {
+          setEditingVenue((prev) => prev ? { ...prev, ...venue } : null);
+        }
       }
     }
   };
@@ -144,11 +167,48 @@ export default function AdminPage() {
     }
   };
 
+  const handleAddCity = async () => {
+    if (!newCityName.trim() || !newCityCountry.trim()) return;
+    const res = await adminFetch("/api/admin/cities", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        city_name: newCityName.trim(),
+        country: newCityCountry.trim(),
+        region: newCityRegion.trim() || null,
+      }),
+    });
+    if (res.ok) {
+      const { city } = await res.json();
+      setCities((prev) => [...prev, { ...city, venue_count: 0, needs_review_count: 0 }].sort((a, b) => a.city_name.localeCompare(b.city_name)));
+      setSelectedCity(city.city_name);
+      setShowAddCity(false);
+      setNewCityName("");
+      setNewCityCountry("");
+      setNewCityRegion("");
+    }
+  };
+
+  const handleDeleteCity = async (city: CityInfo) => {
+    const res = await adminFetch(`/api/admin/cities/${city.id}`, { method: "DELETE" });
+    if (res.ok) {
+      setCities((prev) => prev.filter((c) => c.id !== city.id));
+      if (selectedCity === city.city_name) {
+        setSelectedCity(null);
+        setEditingVenue(null);
+      }
+      setDeleteCityTarget(null);
+    }
+  };
+
   const filteredCities = cities.filter((c) =>
     c.city_name.toLowerCase().includes(citySearch.toLowerCase())
   );
 
   const selectedCityData = cities.find((c) => c.city_name === selectedCity);
+
+  // Build city options for the VenueEditor reassignment dropdown
+  const cityOptions = cities.map((c) => ({ id: c.id, city_name: c.city_name }));
 
   if (reviewMode) {
     return (
@@ -170,7 +230,7 @@ export default function AdminPage() {
           <p className="font-mono text-[10px] text-muted mt-1">{user?.email}</p>
         </div>
 
-        <div className="px-3 py-3">
+        <div className="px-3 py-3 space-y-2">
           <input
             type="text"
             value={citySearch}
@@ -178,6 +238,12 @@ export default function AdminPage() {
             placeholder="Filter cities..."
             className="w-full px-3 py-2 bg-cream border border-border rounded-lg text-xs font-mono text-brown placeholder:text-muted focus:outline-none focus:border-gold"
           />
+          <button
+            onClick={() => setShowAddCity(true)}
+            className="w-full px-3 py-1.5 border border-dashed border-gold/40 text-gold text-xs font-mono rounded-lg hover:bg-gold/5 transition-colors"
+          >
+            + Add City
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -193,7 +259,7 @@ export default function AdminPage() {
             <button
               key={c.id}
               onClick={() => setSelectedCity(c.city_name)}
-              className={`w-full text-left px-4 py-2.5 text-xs font-mono transition-colors flex items-center justify-between ${
+              className={`w-full text-left px-4 py-2.5 text-xs font-mono transition-colors flex items-center justify-between group ${
                 selectedCity === c.city_name ? "bg-gold/10 text-gold" : "text-secondary hover:bg-cream"
               }`}
             >
@@ -275,6 +341,15 @@ export default function AdminPage() {
                   className="px-4 py-2 bg-gold text-white text-xs font-mono rounded-lg hover:bg-gold/90 transition-colors"
                 >
                   + Add Venue
+                </button>
+              )}
+              {selectedCityData && (
+                <button
+                  onClick={() => setDeleteCityTarget(selectedCityData)}
+                  className="px-3 py-2 border border-red-500/30 text-red-500 text-xs font-mono rounded-lg hover:bg-red-500/10 transition-colors"
+                  title="Delete this city"
+                >
+                  Delete City
                 </button>
               )}
             </div>
@@ -402,6 +477,7 @@ export default function AdminPage() {
                   <VenueEditor
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     venue={editingVenue as any}
+                    cities={cityOptions}
                     onSave={(updates) => handleSaveVenue(editingVenue.id, updates)}
                     onDelete={() => setDeleteTarget(editingVenue)}
                     onClose={() => setEditingVenue(null)}
@@ -423,7 +499,7 @@ export default function AdminPage() {
         />
       )}
 
-      {/* Delete confirmation */}
+      {/* Delete venue confirmation */}
       <ConfirmModal
         isOpen={deleteTarget !== null}
         title="Delete venue?"
@@ -432,6 +508,70 @@ export default function AdminPage() {
         onConfirm={() => deleteTarget && handleDeleteVenue(deleteTarget)}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {/* Delete city confirmation */}
+      <ConfirmModal
+        isOpen={deleteCityTarget !== null}
+        title="Delete city?"
+        message={`Are you sure you want to delete "${deleteCityTarget?.city_name}" and all ${deleteCityTarget?.venue_count ?? 0} venues in it? This cannot be undone.`}
+        confirmLabel="Delete City"
+        onConfirm={() => deleteCityTarget && handleDeleteCity(deleteCityTarget)}
+        onCancel={() => setDeleteCityTarget(null)}
+      />
+
+      {/* Add city modal */}
+      {showAddCity && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-surface rounded-xl p-6 w-full max-w-md shadow-lg border border-border">
+            <h3 className="font-serif text-lg text-brown mb-4">Add New City</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">City Name *</label>
+                <input
+                  value={newCityName}
+                  onChange={(e) => setNewCityName(e.target.value)}
+                  placeholder="e.g. Berlin"
+                  className="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream focus:outline-none focus:border-gold"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Country *</label>
+                <input
+                  value={newCityCountry}
+                  onChange={(e) => setNewCityCountry(e.target.value)}
+                  placeholder="e.g. Germany"
+                  className="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream focus:outline-none focus:border-gold"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Region</label>
+                <input
+                  value={newCityRegion}
+                  onChange={(e) => setNewCityRegion(e.target.value)}
+                  placeholder="e.g. Europe"
+                  className="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream focus:outline-none focus:border-gold"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleAddCity}
+                disabled={!newCityName.trim() || !newCityCountry.trim()}
+                className="flex-1 px-4 py-2 bg-gold text-white text-xs font-mono rounded-lg hover:bg-gold/90 transition-colors disabled:opacity-40"
+              >
+                Create City
+              </button>
+              <button
+                onClick={() => { setShowAddCity(false); setNewCityName(""); setNewCityCountry(""); setNewCityRegion(""); }}
+                className="px-4 py-2 border border-border text-secondary text-xs font-mono rounded-lg hover:bg-cream transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

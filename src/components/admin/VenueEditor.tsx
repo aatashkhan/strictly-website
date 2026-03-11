@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 interface VenueEditorRow {
   id: string;
@@ -19,11 +19,18 @@ interface VenueEditorRow {
   google_maps_url?: string | null;
   instagram?: string | null;
   website?: string | null;
+  city_id?: string;
   [key: string]: unknown;
+}
+
+interface CityOption {
+  id: string;
+  city_name: string;
 }
 
 interface VenueEditorProps {
   venue: VenueEditorRow;
+  cities?: CityOption[];
   onSave: (updates: Record<string, unknown>) => Promise<void>;
   onDelete: () => void;
   onClose: () => void;
@@ -35,7 +42,7 @@ const PRICE_OPTIONS = ["", "$", "$$", "$$$", "$$$$"];
 const STATUS_OPTIONS = ["open", "closed", "temporarily_closed"];
 const ACCESS_OPTIONS = ["public", "private", "members_guests"];
 
-export default function VenueEditor({ venue, onSave, onDelete, onClose, adminFetch }: VenueEditorProps) {
+export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, adminFetch }: VenueEditorProps) {
   const fetchFn = adminFetch ?? fetch;
   const [name, setName] = useState(venue.name);
   const [category, setCategory] = useState(venue.category);
@@ -47,8 +54,23 @@ export default function VenueEditor({ venue, onSave, onDelete, onClose, adminFet
   const [access, setAccess] = useState(venue.access ?? "public");
   const [displayOrder, setDisplayOrder] = useState(venue.display_order?.toString() ?? "");
   const [needsReview, setNeedsReview] = useState(venue.needs_review);
+  const [cityId, setCityId] = useState(venue.city_id ?? "");
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // Use a ref to always have the latest form values for the debounced save
+  const formRef = useRef({
+    name, category, subcategory, neighborhood, dennaNotes,
+    price, status, access, displayOrder, needsReview, cityId,
+  });
+
+  // Keep the ref in sync with state
+  useEffect(() => {
+    formRef.current = {
+      name, category, subcategory, neighborhood, dennaNotes,
+      price, status, access, displayOrder, needsReview, cityId,
+    };
+  });
 
   // Reset when venue changes
   useEffect(() => {
@@ -62,31 +84,37 @@ export default function VenueEditor({ venue, onSave, onDelete, onClose, adminFet
     setAccess(venue.access ?? "public");
     setDisplayOrder(venue.display_order?.toString() ?? "");
     setNeedsReview(venue.needs_review);
+    setCityId(venue.city_id ?? "");
     setSaved(false);
   }, [venue]);
 
-  const save = async () => {
+  const save = useCallback(async () => {
+    const f = formRef.current;
     const updates: Record<string, unknown> = {
-      name,
-      category,
-      subcategory: subcategory || null,
-      neighborhood: neighborhood || null,
-      denna_note: dennaNotes || null,
-      price_indicator: price || null,
-      status,
-      access,
-      display_order: displayOrder ? parseInt(displayOrder, 10) : null,
-      needs_review: needsReview,
+      name: f.name,
+      category: f.category,
+      subcategory: f.subcategory || null,
+      neighborhood: f.neighborhood || null,
+      denna_note: f.dennaNotes || null,
+      price_indicator: f.price || null,
+      status: f.status,
+      access: f.access,
+      display_order: f.displayOrder ? parseInt(f.displayOrder, 10) : null,
+      needs_review: f.needsReview,
     };
+    // Include city_id only if it changed
+    if (f.cityId && f.cityId !== venue.city_id) {
+      updates.city_id = f.cityId;
+    }
     await onSave(updates);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
+  }, [onSave, venue.city_id]);
 
-  const debouncedSave = () => {
+  const debouncedSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(save, 800);
-  };
+  }, [save]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -123,6 +151,23 @@ export default function VenueEditor({ venue, onSave, onDelete, onClose, adminFet
             className="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream focus:outline-none focus:border-gold"
           />
         </div>
+
+        {/* Move to City */}
+        {cities && cities.length > 0 && (
+          <div>
+            <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">City</label>
+            <select
+              value={cityId}
+              onChange={(e) => { setCityId(e.target.value); debouncedSave(); }}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream"
+            >
+              <option value="">—</option>
+              {cities.map((c) => (
+                <option key={c.id} value={c.id}>{c.city_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Category + Subcategory */}
         <div className="grid grid-cols-2 gap-3">

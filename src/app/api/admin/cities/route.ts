@@ -53,3 +53,37 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ cities: enriched });
 }
+
+/** POST /api/admin/cities — create a new city */
+export async function POST(request: NextRequest) {
+  const auth = await verifyAdmin(request);
+  if (!auth.ok) return auth.response;
+  const { supabase } = auth;
+
+  const body = await request.json();
+  const { city_name, country, region } = body;
+
+  if (!city_name || !country) {
+    return NextResponse.json(
+      { error: "city_name and country are required" },
+      { status: 400 }
+    );
+  }
+
+  const slug = city_name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  const { data, error } = await supabase
+    .from("cities")
+    .insert({ slug, city_name, country, region: region || null })
+    .select()
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ city: data }, { status: 201 });
+}

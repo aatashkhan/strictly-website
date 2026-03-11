@@ -31,7 +31,7 @@ export default function CitySettings({ cityId, adminFetch }: { cityId: string; a
       .then((r) => r.json())
       .then((data) => { setCity(data.city); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [cityId]);
+  }, [cityId, fetchFn]);
 
   if (loading || !city) {
     return <div className="flex items-center justify-center py-20"><p className="font-mono text-sm text-muted">Loading...</p></div>;
@@ -83,6 +83,21 @@ export default function CitySettings({ cityId, adminFetch }: { cityId: string; a
     save({ custom_vibes: updated });
   };
 
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", "cities");
+
+    const res = await fetchFn("/api/admin/upload", { method: "POST", body: formData });
+    if (res.ok) {
+      const { url } = await res.json();
+      await save({ image_url: url } as Partial<CityData>);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6 max-w-2xl">
       <div className="flex items-center justify-between mb-6">
@@ -91,6 +106,15 @@ export default function CitySettings({ cityId, adminFetch }: { cityId: string; a
       </div>
 
       <div className="space-y-6">
+        {/* Cover Photo */}
+        <div>
+          <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-2">Cover Photo</label>
+          {city.image_url && (
+            <img src={city.image_url} alt={city.city_name} className="w-full h-48 object-cover rounded-lg mb-2" />
+          )}
+          <input type="file" accept="image/*" onChange={handleCoverUpload} className="text-xs font-mono" />
+        </div>
+
         {/* Basic info */}
         <div className="grid grid-cols-3 gap-3">
           <div>
