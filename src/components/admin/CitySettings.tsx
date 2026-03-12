@@ -71,6 +71,21 @@ export default function CitySettings({ cityId, adminFetch }: { cityId: string; a
     save({ loading_tips: updated });
   };
 
+  const editTip = (index: number, value: string) => {
+    const updated = [...(city.loading_tips ?? [])];
+    updated[index] = value;
+    setCity({ ...city, loading_tips: updated });
+  };
+
+  const saveTip = (index: number) => {
+    const tips = city.loading_tips ?? [];
+    if (!tips[index]?.trim()) {
+      removeTip(index);
+      return;
+    }
+    save({ loading_tips: tips });
+  };
+
   const addVibe = () => {
     if (!newVibe.trim()) return;
     const updated = [...(city.custom_vibes ?? []), newVibe.trim()];
@@ -184,9 +199,15 @@ export default function CitySettings({ cityId, adminFetch }: { cityId: string; a
           <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-2">Loading Tips</label>
           <div className="space-y-1 mb-2">
             {(city.loading_tips ?? []).map((tip, i) => (
-              <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-surface rounded-lg">
-                <span className="flex-1 text-xs font-mono text-brown">{tip}</span>
-                <button onClick={() => removeTip(i)} className="text-muted hover:text-red-500 text-sm">&times;</button>
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  value={tip}
+                  onChange={(e) => editTip(i, e.target.value)}
+                  onBlur={() => saveTip(i)}
+                  onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                  className="flex-1 px-3 py-1.5 border border-border rounded-lg text-xs font-mono text-brown bg-surface focus:outline-none focus:border-gold focus:bg-cream"
+                />
+                <button onClick={() => removeTip(i)} className="text-muted hover:text-red-500 text-sm shrink-0">&times;</button>
               </div>
             ))}
           </div>
