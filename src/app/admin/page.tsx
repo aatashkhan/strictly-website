@@ -201,9 +201,9 @@ export default function AdminPage() {
     }
   };
 
-  const filteredCities = cities.filter((c) =>
-    c.city_name.toLowerCase().includes(citySearch.toLowerCase())
-  );
+  const filteredCities = cities
+    .filter((c) => c.city_name.toLowerCase().includes(citySearch.toLowerCase()))
+    .sort((a, b) => b.venue_count - a.venue_count);
 
   const selectedCityData = cities.find((c) => c.city_name === selectedCity);
 
