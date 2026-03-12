@@ -48,6 +48,7 @@ CRITICAL RULES:
 - GROUP venues by neighborhood/proximity each day — minimize cross-city travel. Each day should follow a logical geographic arc.
 - For each venue: name it EXACTLY as listed in the database, say what to get/do, add a tip
 - Keep it feeling personal and warm, not robotic or generic
+- ESSENTIALS: Venues marked [ESSENTIAL] are must-includes. For a 1-day trip, prioritize venues marked "24hr". For 2-day trips, include 24hr + 48hr essentials. For 3-day trips, include all essential tiers. Always try to fit essentials in before adding other venues.
 
 MEAL TIMING RULES (follow strictly):
 - Breakfast / Coffee: 7:30 AM – 10:00 AM
@@ -194,6 +195,11 @@ export function buildUserPrompt(
     for (const venue of venues) {
       let line = `  - ${venue.name} [${venue.category}/${venue.subcategory}]`;
       if (venue.access === 'members_guests') line += ` (members/guest access only)`;
+      const essentials: string[] = [];
+      if (venue.essential_24h) essentials.push("24hr");
+      if (venue.essential_48h) essentials.push("48hr");
+      if (venue.essential_72h) essentials.push("72hr");
+      if (essentials.length > 0) line += ` [ESSENTIAL for ${essentials.join(", ")} trips]`;
       if (venue.address) line += ` @ ${venue.address}`;
       if (venue.denna_note) line += `: ${venue.denna_note}`;
       if (venue.opening_hours?.weekday_text?.length) {

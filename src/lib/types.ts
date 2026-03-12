@@ -31,6 +31,9 @@ export interface Venue {
   access?: 'public' | 'private' | 'members_guests';
   status?: 'open' | 'closed' | 'temporarily_closed';
   status_note?: string;
+  essential_24h?: boolean;
+  essential_48h?: boolean;
+  essential_72h?: boolean;
 }
 
 export interface CityData {
