@@ -303,9 +303,9 @@ export default function AdminPage() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         {/* Top bar */}
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
           <div>
             <h2 className="font-serif text-2xl text-brown">
               {selectedCity ?? "All Cities"}
@@ -358,7 +358,7 @@ export default function AdminPage() {
 
         {/* Filters bar (venues tab only) */}
         {tab === "venues" && (
-          <div className="px-6 py-3 border-b border-border flex flex-wrap items-center gap-3">
+          <div className="px-6 py-3 border-b border-border flex flex-wrap items-center gap-3 shrink-0">
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
