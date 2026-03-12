@@ -67,20 +67,10 @@ function HotelCard({
             ▼
           </span>
         </div>
-        {!expanded && venue.denna_note && (
-          <p className="text-xs font-mono text-secondary mt-1 line-clamp-1">
-            {venue.denna_note}
-          </p>
-        )}
       </button>
 
       {expanded && (
         <div className="px-4 pb-3 space-y-2">
-          {venue.denna_note && (
-            <p className="text-xs font-mono text-secondary leading-relaxed">
-              {venue.denna_note}
-            </p>
-          )}
           {venue.image_url && (
             <img
               src={venue.image_url}

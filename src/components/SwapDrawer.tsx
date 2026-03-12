@@ -141,11 +141,6 @@ export default function SwapDrawer({
                             {venue.address}
                           </p>
                         )}
-                        {venue.denna_note && (
-                          <p className="text-xs font-mono text-secondary mt-1 line-clamp-2 leading-relaxed">
-                            {venue.denna_note}
-                          </p>
-                        )}
                       </div>
                       <div className="shrink-0 flex flex-col items-end gap-1">
                         {dist !== null && (

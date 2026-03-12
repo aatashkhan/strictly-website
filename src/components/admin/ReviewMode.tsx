@@ -227,6 +227,7 @@ export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: Rev
           {/* Denna's Note - the main field */}
           <div className="mb-6">
             <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Denna&apos;s Note</label>
+            <p className="text-[10px] font-mono text-muted/70 mb-1.5">Internal note. Claude reads this when writing recommendations but it&apos;s never shown to users directly. Write whatever is helpful, stream-of-consciousness is fine.</p>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
