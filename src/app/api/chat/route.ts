@@ -134,17 +134,20 @@ RULES FOR REFINEMENT:
 
 RESPONSE FORMAT — FOLLOW THIS EXACTLY:
 
-If MODIFYING the itinerary, respond in this format:
-
-<explanation>1-2 sentences in Denna's voice about what you changed</explanation>
+If MODIFYING the itinerary:
+1. First write 1-2 sentences in Denna's voice about what you changed (plain text, no tags)
+2. Then on a new line write exactly: ---JSON---
+3. Then output ONLY the changed days as a JSON array. Example:
 ---JSON---
-{"changedDays":[<only the day objects you changed>],"changedDayNumbers":[<list of day numbers that changed>]}
+[{"day":2,"title":"Day Title","items":[{"time":"9:00 AM","endTime":"10:30 AM","type":"eat","name":"Venue Name","note":"Denna's note about it","duration":90}]}]
 
-Each day object: { "day": 1, "title": "...", "items": [{ "time": "9:00 AM", "endTime": "10:30 AM", "type": "eat", "name": "Exact Venue Name", "note": "...", "duration": 90 }] }
+CRITICAL RULES:
+- Only include days you actually changed, not all days
+- The JSON must be a plain array of day objects: [{"day":N,"title":"...","items":[...]}]
+- Each item needs: time, type, name, note. Optional: endTime, duration
+- After ---JSON--- output ONLY the JSON array. No markdown, no backticks, no extra text.
 
-CRITICAL: Only include the days you actually modified. Do NOT return unchanged days.
-
-If NOT modifying the itinerary (just answering a question), respond conversationally without ---JSON---.${
+If NOT modifying (just answering a question), respond conversationally. Do not include ---JSON---.${
       context?.currentTime || context?.currentLocation || (context?.completedItems && context.completedItems.length > 0)
         ? `
 
@@ -208,7 +211,9 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
                   conversationalPart = parts[0];
                   jsonPart = parts[1] || "";
                 } else {
-                  sendEvent({ type: "text", content: chunk });
+                  // Stream text but strip any XML-like tags
+                  const clean = chunk.replace(/<\/?explanation>/g, "");
+                  if (clean) sendEvent({ type: "text", content: clean });
                 }
               } else {
                 jsonPart += chunk;
@@ -219,9 +224,28 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
           // Process the complete response
           if (hitSeparator && jsonPart.trim()) {
             try {
-              const parsed = JSON.parse(jsonPart.trim());
-              const changedDays: ItineraryDay[] = parsed.changedDays || parsed.days || [];
-              const changedDayNumbers: number[] = parsed.changedDayNumbers || changedDays.map((d: ItineraryDay) => d.day);
+              // Strip markdown code fences if present
+              let jsonStr = jsonPart.trim();
+              jsonStr = jsonStr.replace(/^```json?\s*/i, "").replace(/\s*```$/, "");
+
+              const parsed = JSON.parse(jsonStr);
+
+              // Support both array format and object wrapper
+              let changedDays: ItineraryDay[];
+              if (Array.isArray(parsed)) {
+                changedDays = parsed;
+              } else if (parsed.changedDays) {
+                changedDays = parsed.changedDays;
+              } else if (parsed.days) {
+                changedDays = parsed.days;
+              } else if (parsed.day && parsed.items) {
+                // Single day object returned unwrapped
+                changedDays = [parsed];
+              } else {
+                changedDays = [];
+              }
+
+              const changedDayNumbers: number[] = changedDays.map((d: ItineraryDay) => d.day);
 
               if (changedDays.length > 0 && changedDays.every((d: { items?: unknown }) => Array.isArray(d.items))) {
                 // Merge changed days into full itinerary
@@ -230,7 +254,7 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
                   return replacement || existingDay;
                 });
 
-                // Handle added days (if Claude added a new day)
+                // Handle added days
                 for (const cd of changedDays) {
                   if (!mergedDays.find(d => d.day === cd.day)) {
                     mergedDays.push(cd);
@@ -239,9 +263,9 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
                 mergedDays.sort((a, b) => a.day - b.day);
 
                 const updatedItinerary: ItineraryData = {
-                  intro: parsed.intro ?? itinerary.intro,
+                  intro: itinerary.intro,
                   days: mergedDays,
-                  signoff: parsed.signoff ?? itinerary.signoff,
+                  signoff: itinerary.signoff,
                 };
 
                 const tripStartDate = tripData.arrival?.date ?? undefined;
@@ -258,51 +282,68 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
                   content: "\n\n(I tried to update your itinerary but the format came out wrong — try rephrasing your request.)",
                 });
               }
-            } catch {
+            } catch (parseErr) {
+              console.error("JSON parse error:", parseErr, "Raw JSON:", jsonPart.trim().slice(0, 500));
               sendEvent({
                 type: "text",
                 content: "\n\n(I couldn\u2019t update the itinerary this time — try rephrasing your request.)",
               });
             }
           } else if (!hitSeparator) {
-            // No separator found — check for fallback JSON extraction
+            // No separator found — try to extract JSON from the full text
+            // Look for array [...] or object {...} containing day data
+            const firstBracket = fullText.indexOf('[');
+            const lastBracket = fullText.lastIndexOf(']');
             const firstBrace = fullText.indexOf('{');
             const lastBrace = fullText.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace > firstBrace) {
-              const candidate = fullText.slice(firstBrace, lastBrace + 1);
-              if (candidate.includes('"days"') || candidate.includes('"changedDays"')) {
-                try {
-                  const parsed = JSON.parse(candidate);
-                  const changedDays = parsed.changedDays || parsed.days || [];
-                  if (Array.isArray(changedDays) && changedDays.length > 0) {
-                    const changedDayNumbers = parsed.changedDayNumbers || changedDays.map((d: ItineraryDay) => d.day);
-                    const mergedDays = itinerary.days.map(existingDay => {
-                      const replacement = changedDays.find((d: ItineraryDay) => d.day === existingDay.day);
-                      return replacement || existingDay;
-                    });
-                    mergedDays.sort((a, b) => a.day - b.day);
 
-                    const updatedItinerary: ItineraryData = {
-                      intro: parsed.intro ?? itinerary.intro,
-                      days: mergedDays,
-                      signoff: parsed.signoff ?? itinerary.signoff,
-                    };
-                    const tripStartDate = tripData.arrival?.date ?? undefined;
-                    updatedItinerary.days = enrichItinerary(
-                      updatedItinerary.days,
-                      cityData.venues,
-                      tripStartDate
-                    );
-                    sendEvent({ type: "itinerary", data: updatedItinerary, changedDays: changedDayNumbers });
-                  }
-                } catch {
-                  // fallback parse failed
+            let candidate = "";
+            // Prefer array format (our requested format)
+            if (firstBracket !== -1 && lastBracket > firstBracket) {
+              candidate = fullText.slice(firstBracket, lastBracket + 1);
+            } else if (firstBrace !== -1 && lastBrace > firstBrace) {
+              candidate = fullText.slice(firstBrace, lastBrace + 1);
+            }
+
+            if (candidate && (candidate.includes('"day"') || candidate.includes('"days"'))) {
+              try {
+                const parsed = JSON.parse(candidate);
+                const changedDays: ItineraryDay[] = Array.isArray(parsed)
+                  ? parsed
+                  : (parsed.changedDays || parsed.days || (parsed.day && parsed.items ? [parsed] : []));
+
+                if (changedDays.length > 0) {
+                  const changedDayNumbers = changedDays.map((d: ItineraryDay) => d.day);
+                  const mergedDays = itinerary.days.map(existingDay => {
+                    const replacement = changedDays.find((d: ItineraryDay) => d.day === existingDay.day);
+                    return replacement || existingDay;
+                  });
+                  mergedDays.sort((a, b) => a.day - b.day);
+
+                  const updatedItinerary: ItineraryData = {
+                    intro: itinerary.intro,
+                    days: mergedDays,
+                    signoff: itinerary.signoff,
+                  };
+                  const tripStartDate = tripData.arrival?.date ?? undefined;
+                  updatedItinerary.days = enrichItinerary(
+                    updatedItinerary.days,
+                    cityData.venues,
+                    tripStartDate
+                  );
+                  sendEvent({ type: "itinerary", data: updatedItinerary, changedDays: changedDayNumbers });
                 }
+              } catch {
+                // fallback parse failed
               }
             }
           }
 
-          sendEvent({ type: "done", message: conversationalPart.trim() || fullText });
+          // Clean up any XML tags from the final message
+          const finalMsg = (conversationalPart.trim() || fullText)
+            .replace(/<\/?explanation>/g, "")
+            .trim();
+          sendEvent({ type: "done", message: finalMsg });
           controller.close();
         } catch (error) {
           console.error("Stream error:", error);
