@@ -171,8 +171,16 @@ export function buildUserPrompt(
     lines.push("");
   }
 
-  // Filter out private venues; keep members_guests with annotation
-  const availableVenues = cityData.venues.filter(v => v.access !== 'private');
+  // Filter out private venues and hotel-conditional venues that don't match
+  const selectedHotelName = tripData.hotel?.name?.toLowerCase() ?? "";
+  const availableVenues = cityData.venues.filter(v => {
+    if (v.access === 'private') return false;
+    // Hard filter: conditional_on_hotel venues only show if user selected that hotel
+    if (v.conditional_on_hotel) {
+      return selectedHotelName.includes(v.conditional_on_hotel.toLowerCase());
+    }
+    return true;
+  });
   const hasPrivateVenues = cityData.venues.length > availableVenues.length;
 
   // Group venues by neighborhood for geographic context
@@ -195,6 +203,11 @@ export function buildUserPrompt(
     for (const venue of venues) {
       let line = `  - ${venue.name} [${venue.category}/${venue.subcategory}]`;
       if (venue.access === 'members_guests') line += ` (members/guest access only)`;
+      // Booking metadata tags
+      const booking = venue.booking_difficulty ?? 'walk_in';
+      if (booking !== 'walk_in') line += ` [Booking: ${booking}]`;
+      if (venue.expect_wait) line += ` [Expect wait]`;
+      // Essentialness
       const essentials: string[] = [];
       if (venue.essential_24h) essentials.push("24hr");
       if (venue.essential_48h) essentials.push("48hr");
@@ -236,6 +249,41 @@ export function buildUserPrompt(
       lines.push(`- TRANSIT: ${parts.join(" Also: ")}`);
     }
   }
+  lines.push("");
+
+  // Booking intelligence — compute days until trip and inject rules
+  const bookingStyle = tripData.bookingStyle;
+  let daysUntilTrip: number | null = null;
+  if (tripData.arrival?.date) {
+    const arrivalDate = new Date(tripData.arrival.date + "T00:00:00");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    daysUntilTrip = Math.round((arrivalDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  lines.push("BOOKING & ACCESS RULES:");
+  if (daysUntilTrip !== null) {
+    lines.push(`- This trip starts in ${daysUntilTrip} days.`);
+  }
+  if (bookingStyle) {
+    lines.push(`- The traveler identified as: ${bookingStyle === 'planner' ? 'a planner (willing to book ahead)' : 'spontaneous (prefers walk-in and easy spots)'}.`);
+  }
+  lines.push("- Venues tagged [Booking: easy_res]: bookable on OpenTable or similar, mention 'make a reservation' in your note.");
+  lines.push("- Venues tagged [Booking: hard_to_get_res]: popular spot, book weeks or months ahead.");
+  if (daysUntilTrip !== null && daysUntilTrip < 14) {
+    if (bookingStyle === 'planner') {
+      lines.push("- Trip is < 14 days out but traveler is a planner: include at most one hard-to-get-res venue and note they should try to book ASAP.");
+    } else {
+      lines.push("- Trip is < 14 days out: AVOID hard-to-get-res venues unless they are ESSENTIAL. If you must include one, add a clear note like 'this one's tough to book last-minute — worth a try though'.");
+    }
+  } else if (daysUntilTrip !== null && daysUntilTrip <= 30) {
+    lines.push("- Trip is 14-30 days out: include hard-to-get venues but add a note like 'Book this one ahead — it fills up fast'.");
+  } else {
+    lines.push("- Trip is > 30 days out (or no date given): include everything, just note booking requirements where relevant.");
+  }
+  lines.push("- Venues tagged [Booking: members_only]: only mention as a contextual aside, never as a primary recommendation (e.g. 'if you know a member of X, check it out').");
+  lines.push("- Venues tagged [Expect wait]: NEVER schedule two expect-wait venues back-to-back in the same half-day. Mention the wait in your note (e.g. '(line is long but worth it)').");
+  lines.push("- NEVER schedule two hard-to-get-res venues on the same day.");
   lines.push("");
 
   lines.push(
