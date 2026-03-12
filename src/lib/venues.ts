@@ -171,6 +171,7 @@ export async function getCityData(cityName: string): Promise<CityData | null> {
     recommended_transit: city.recommended_transit ?? [],
     loading_tips: city.loading_tips ?? [],
     custom_vibes: city.custom_vibes ?? [],
+    is_spread_region: city.is_spread_region ?? false,
   };
 }
 

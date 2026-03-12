@@ -55,6 +55,7 @@ export interface CityData {
   recommended_transit?: string[];
   loading_tips?: string[];
   custom_vibes?: string[];
+  is_spread_region?: boolean;
 }
 
 export interface VenueDB {
@@ -86,6 +87,8 @@ export interface HotelSelection {
 
 export type TransitMode = 'auto' | 'rideshare' | 'public_transit' | 'walking_preferred' | 'rental_car';
 
+export type DistancePreference = '30min' | '1hr' | 'anything';
+
 export interface TripFormData {
   city: string;
   duration: string;
@@ -100,6 +103,7 @@ export interface TripFormData {
   hotel: HotelSelection | null;
   transitPreference?: TransitMode | TransitMode[];
   bookingStyle?: 'planner' | 'spontaneous';
+  distancePreference?: DistancePreference;
 }
 
 export interface TravelSegment {

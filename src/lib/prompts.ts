@@ -249,6 +249,16 @@ export function buildUserPrompt(
       lines.push(`- TRANSIT: ${parts.join(" Also: ")}`);
     }
   }
+
+  // Distance preference for spread-out regions
+  if (tripData.distancePreference) {
+    const distanceLabels: Record<string, string> = {
+      '30min': "The traveler only wants venues within about 30 minutes of driving from their hotel/home base. Skip venues that would require longer drives — keep the itinerary tight and local.",
+      '1hr': "The traveler is willing to drive up to 1 hour between venues. You can spread the itinerary across the region but group venues that are near each other on the same day.",
+      'anything': "The traveler is willing to drive any distance — include the best venues regardless of how spread out they are. Just note drive times between stops so they know what to expect.",
+    };
+    lines.push(`- DISTANCE: ${distanceLabels[tripData.distancePreference]}`);
+  }
   lines.push("");
 
   // Booking intelligence — compute days until trip and inject rules

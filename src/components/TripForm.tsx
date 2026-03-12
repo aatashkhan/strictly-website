@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import type { TripFormData, FlightInfo, HotelSelection } from "@/lib/types";
+import type { TripFormData, FlightInfo, HotelSelection, DistancePreference } from "@/lib/types";
 import { VIBES, COMPANIONS, BUDGETS, PACES, TRANSIT_MODES } from "@/lib/constants";
 import type { TransitMode } from "@/lib/types";
 import FlightInput from "./FlightInput";
@@ -75,6 +75,8 @@ export default function TripForm({ onSubmit, onCityChange, initialCity, initialD
   const [bookingStyleOverride, setBookingStyleOverride] = useState<boolean | null>(null);
   const [durationError, setDurationError] = useState("");
   const [cityVibesData, setCityVibesData] = useState<{ customVibes: string[]; categories: Record<string, number> } | null>(null);
+  const [isSpreadRegion, setIsSpreadRegion] = useState(false);
+  const [distancePreference, setDistancePreference] = useState<DistancePreference | undefined>(initialData?.distancePreference);
 
   // Compute days until trip from arrival date
   const daysUntilTrip = useMemo(() => {
@@ -104,6 +106,7 @@ export default function TripForm({ onSubmit, onCityChange, initialCity, initialD
   useEffect(() => {
     if (!city) {
       setCityVibesData(null);
+      setIsSpreadRegion(false);
       return;
     }
     fetch(`/api/venues/${encodeURIComponent(city)}`)
@@ -118,8 +121,13 @@ export default function TripForm({ onSubmit, onCityChange, initialCity, initialD
         if (recommended && recommended.length > 0) {
           setTransitPreferences(recommended.filter((t): t is TransitMode => t !== 'auto') as TransitMode[]);
         }
+        // Set spread region flag for distance preference question
+        setIsSpreadRegion(data?.is_spread_region ?? false);
       })
-      .catch(() => setCityVibesData(null));
+      .catch(() => {
+        setCityVibesData(null);
+        setIsSpreadRegion(false);
+      });
   }, [city]);
 
   // Compute vibes list: custom_vibes from DB, auto-generated from categories, merged with defaults
@@ -251,6 +259,7 @@ export default function TripForm({ onSubmit, onCityChange, initialCity, initialD
       hotel,
       transitPreference: transitPreferences.length > 0 ? transitPreferences : undefined,
       bookingStyle,
+      distancePreference: isSpreadRegion ? distancePreference : undefined,
     });
   };
 
@@ -559,6 +568,38 @@ export default function TripForm({ onSubmit, onCityChange, initialCity, initialD
           </p>
         )}
       </div>
+
+      {/* Distance Preference — only for spread-out regions */}
+      {isSpreadRegion && (
+        <div>
+          <label className="block uppercase text-xs tracking-widest text-muted font-mono mb-1">
+            How far are you willing to drive?
+          </label>
+          <p className="text-xs font-mono text-muted mb-3">
+            This region is spread out — venues may be far apart. Help us plan around your comfort zone.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {([
+              { value: '30min' as DistancePreference, label: '30 minutes', icon: '🚗' },
+              { value: '1hr' as DistancePreference, label: '1 hour', icon: '🛣️' },
+              { value: 'anything' as DistancePreference, label: 'Anything for strictness', icon: '🗺️' },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDistancePreference(opt.value)}
+                className={`px-5 py-2 rounded-full border text-sm font-mono transition-all ${
+                  distancePreference === opt.value
+                    ? "bg-brown text-cream border-brown"
+                    : "border-border text-secondary hover:border-gold"
+                }`}
+              >
+                {opt.icon} {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Notes */}
       <div>
