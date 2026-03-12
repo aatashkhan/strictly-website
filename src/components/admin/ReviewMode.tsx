@@ -14,6 +14,7 @@ interface ReviewVenue {
   google_maps_url: string | null;
   needs_review: boolean;
   image_url: string | null;
+  image_urls?: string[];
   cities?: { city_name: string };
 }
 
@@ -34,7 +35,7 @@ export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: Rev
   const [totalReviewed, setTotalReviewed] = useState(0);
   const [totalVenueCount, setTotalVenueCount] = useState(0);
   const [uploading, setUploading] = useState(false);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
 
   const loadReviewQueue = useCallback(async () => {
     setLoading(true);
@@ -68,13 +69,14 @@ export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: Rev
     if (current) {
       setNote(current.denna_note ?? "");
       setNeighborhood(current.neighborhood ?? "");
-      setImageUrl(current.image_url ?? null);
+      const imgs = current.image_urls?.length ? current.image_urls : current.image_url ? [current.image_url] : [];
+      setImageUrls(imgs);
     }
   }, [current]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !current) return;
+    if (!file || !current || imageUrls.length >= 3) return;
     setUploading(true);
     const formData = new FormData();
     formData.append("file", file);
@@ -82,14 +84,26 @@ export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: Rev
     const res = await fetchFn("/api/admin/upload", { method: "POST", body: formData });
     if (res.ok) {
       const { url } = await res.json();
-      setImageUrl(url);
+      const updated = [...imageUrls, url];
+      setImageUrls(updated);
       await fetchFn(`/api/admin/venues/${current.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_url: url }),
+        body: JSON.stringify({ image_urls: updated, image_url: updated[0] }),
       });
     }
     setUploading(false);
+  };
+
+  const handleRemoveImage = async (index: number) => {
+    if (!current) return;
+    const updated = imageUrls.filter((_, i) => i !== index);
+    setImageUrls(updated);
+    await fetchFn(`/api/admin/venues/${current.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_urls: updated, image_url: updated[0] || null }),
+    });
   };
 
   const saveAndNext = async () => {
@@ -208,20 +222,34 @@ export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: Rev
             />
           </div>
 
-          {/* Photo */}
+          {/* Photos (up to 3) */}
           <div className="mb-4">
-            <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Photo</label>
-            {imageUrl ? (
-              <img src={imageUrl} alt="" className="w-full h-40 object-cover rounded-lg mb-2" />
+            <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Photos ({imageUrls.length}/3)</label>
+            {imageUrls.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2 mb-2">
+                {imageUrls.map((url, i) => (
+                  <div key={i} className="relative group">
+                    <img src={url} alt="" className="w-full aspect-[4/3] object-cover rounded-lg" />
+                    <button
+                      onClick={() => handleRemoveImage(i)}
+                      className="absolute top-1 right-1 w-5 h-5 bg-black/60 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <div className="w-full h-24 bg-surface border border-dashed border-border rounded-lg flex items-center justify-center mb-2">
-                <span className="font-mono text-xs text-muted">No photo</span>
+              <div className="w-full h-20 bg-surface border border-dashed border-border rounded-lg flex items-center justify-center mb-2">
+                <span className="font-mono text-xs text-muted">No photos</span>
               </div>
             )}
-            <label className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-mono border border-border cursor-pointer hover:border-gold transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
-              {uploading ? "Uploading..." : imageUrl ? "Replace photo" : "Upload photo"}
-              <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-            </label>
+            {imageUrls.length < 3 && (
+              <label className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-mono border border-border cursor-pointer hover:border-gold transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
+                {uploading ? "Uploading..." : "+ Add photo"}
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+              </label>
+            )}
           </div>
 
           {/* Denna's Note - the main field */}

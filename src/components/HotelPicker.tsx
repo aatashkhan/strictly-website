@@ -71,13 +71,11 @@ function HotelCard({
 
       {expanded && (
         <div className="px-4 pb-3 space-y-2">
-          {venue.image_url && (
-            <img
-              src={venue.image_url}
-              alt={venue.name}
-              className="w-full h-32 object-cover rounded-lg"
-            />
-          )}
+          {(() => {
+            const imgs = venue.image_urls?.length ? venue.image_urls : venue.image_url ? [venue.image_url] : [];
+            const img = imgs.length > 0 ? imgs[Math.floor(Math.random() * imgs.length)] : null;
+            return img ? <img src={img} alt={venue.name} className="w-full h-32 object-cover rounded-lg" /> : null;
+          })()}
           {venue.address && (
             <p className="text-[10px] font-mono text-muted">
               {venue.address}

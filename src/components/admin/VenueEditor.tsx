@@ -127,9 +127,20 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
     saveTimer.current = setTimeout(save, 800);
   }, [save]);
 
+  // Get current images from image_urls array, falling back to legacy image_url
+  const getImageUrls = (): string[] => {
+    const urls = (venue as Record<string, unknown>).image_urls as string[] | undefined;
+    if (urls && urls.length > 0) return urls;
+    if (venue.image_url) return [venue.image_url];
+    return [];
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const currentImages = getImageUrls();
+    if (currentImages.length >= 3) return;
 
     const formData = new FormData();
     formData.append("file", file);
@@ -138,8 +149,15 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
     const res = await fetchFn("/api/admin/upload", { method: "POST", body: formData });
     if (res.ok) {
       const { url } = await res.json();
-      await onSave({ image_url: url });
+      const updated = [...currentImages, url];
+      await onSave({ image_urls: updated, image_url: updated[0] });
     }
+  };
+
+  const handleRemoveImage = async (index: number) => {
+    const currentImages = getImageUrls();
+    const updated = currentImages.filter((_, i) => i !== index);
+    await onSave({ image_urls: updated, image_url: updated[0] || null });
   };
 
   return (
@@ -308,13 +326,32 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
           </button>
         </div>
 
-        {/* Image */}
+        {/* Images (up to 3) */}
         <div>
-          <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Image</label>
-          {venue.image_url && (
-            <img src={venue.image_url} alt="" className="w-full h-32 object-cover rounded-lg mb-2" />
+          <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">
+            Photos ({getImageUrls().length}/3)
+          </label>
+          {getImageUrls().length > 0 && (
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {getImageUrls().map((url, i) => (
+                <div key={i} className="relative group">
+                  <img src={url} alt="" className="w-full aspect-[4/3] object-cover rounded-lg" />
+                  <button
+                    onClick={() => handleRemoveImage(i)}
+                    className="absolute top-1 right-1 w-5 h-5 bg-black/60 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
-          <input type="file" accept="image/*" onChange={handleImageUpload} className="text-xs font-mono" />
+          {getImageUrls().length < 3 && (
+            <label className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-mono border border-border cursor-pointer hover:border-gold transition-colors">
+              + Add photo
+              <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+            </label>
+          )}
         </div>
 
         {/* Location info (read-only) */}

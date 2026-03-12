@@ -28,6 +28,7 @@ export interface Venue {
   google_maps_url: string | null;
   geocode_status: 'verified' | 'unverified' | 'not_found';
   image_url?: string | null;
+  image_urls?: string[];
   access?: 'public' | 'private' | 'members_guests';
   status?: 'open' | 'closed' | 'temporarily_closed';
   status_note?: string;
