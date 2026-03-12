@@ -170,11 +170,11 @@ export default function HotelPicker({
 
   // Split into city hotels vs nearby getaways
   const cityHotels = useMemo(
-    () => stayVenues.filter((v) => v.subcategory !== "nearby_getaway"),
+    () => stayVenues.filter((v) => !v.nearby_getaway),
     [stayVenues]
   );
   const nearbyGetaways = useMemo(
-    () => stayVenues.filter((v) => v.subcategory === "nearby_getaway"),
+    () => stayVenues.filter((v) => v.nearby_getaway),
     [stayVenues]
   );
 

@@ -16,6 +16,7 @@ export interface CityMeta {
 
 interface TripFormProps {
   onSubmit: (data: TripFormData) => void;
+  onCityChange?: (city: string) => void;
   initialCity?: string;
   initialData?: TripFormData | null;
   cities?: string[];
@@ -35,7 +36,7 @@ function calcNightsFromDates(arrDate: string, depDate: string): number | null {
   return diff > 0 ? diff : null;
 }
 
-export default function TripForm({ onSubmit, initialCity, initialData, cities: citiesProp, cityMetas }: TripFormProps) {
+export default function TripForm({ onSubmit, onCityChange, initialCity, initialData, cities: citiesProp, cityMetas }: TripFormProps) {
   const [fetchedCities, setFetchedCities] = useState<string[]>([]);
   const [fetchedMetas, setFetchedMetas] = useState<CityMeta[]>([]);
 
@@ -99,7 +100,7 @@ export default function TripForm({ onSubmit, initialCity, initialData, cities: c
     }
   }, [daysUntilTrip, bookingStyleOverride]);
 
-  // Fetch city vibes data when city changes
+  // Fetch city vibes data and recommended transit when city changes
   useEffect(() => {
     if (!city) {
       setCityVibesData(null);
@@ -112,6 +113,11 @@ export default function TripForm({ onSubmit, initialCity, initialData, cities: c
           customVibes: data?.custom_vibes ?? [],
           categories: data?.categories ?? {},
         });
+        // Pre-select recommended transit modes from city settings
+        const recommended = data?.recommended_transit as string[] | undefined;
+        if (recommended && recommended.length > 0) {
+          setTransitPreferences(recommended.filter((t): t is TransitMode => t !== 'auto') as TransitMode[]);
+        }
       })
       .catch(() => setCityVibesData(null));
   }, [city]);
@@ -255,6 +261,7 @@ export default function TripForm({ onSubmit, initialCity, initialData, cities: c
     setHotel(null);
     setDuration("");
     setDurationError("");
+    onCityChange?.(c);
   };
 
   return (

@@ -12,13 +12,13 @@ export async function getCities(): Promise<string[]> {
   const supabase = createServerSupabase();
   const { data, error } = await supabase
     .from("cities")
-    .select("city_name")
+    .select("city_name, hidden")
     .order("city_name");
   if (error) {
     console.error("getCities error:", error.message);
     return [];
   }
-  return data.map((c) => c.city_name);
+  return data.filter((c) => !c.hidden).map((c) => c.city_name);
 }
 
 /** Light city metadata — no venues, for form dropdowns */
@@ -35,9 +35,12 @@ export async function getCityMetas(): Promise<CityMeta[]> {
   // Fetch cities
   const { data: cities, error: citiesErr } = await supabase
     .from("cities")
-    .select("id, city_name, country")
+    .select("id, city_name, country, hidden")
     .order("city_name");
   if (citiesErr || !cities) return [];
+
+  // Filter out hidden cities from consumer-facing list
+  const visibleCities = cities.filter((c) => !c.hidden);
 
   // Fetch ALL venue data — paginate because Supabase caps at 1000 rows per request
   const allVenues: { city_id: string; neighborhood: string | null }[] = [];
@@ -68,7 +71,7 @@ export async function getCityMetas(): Promise<CityMeta[]> {
     if (v.neighborhood) s.neighborhoods.add(v.neighborhood);
   }
 
-  return cities.map((c) => {
+  return visibleCities.map((c) => {
     const stats = cityStats.get(c.id);
     return {
       city_name: c.city_name,
@@ -113,6 +116,8 @@ function transformVenue(row: Record<string, unknown>): Venue {
     expect_wait: (row.expect_wait as boolean) ?? false,
     conditional_on_hotel: (row.conditional_on_hotel as string) ?? null,
     ai_generated_note: (row.ai_generated_note as string) ?? null,
+    image_urls: (row.image_urls as string[]) ?? [],
+    nearby_getaway: (row.nearby_getaway as boolean) ?? false,
   };
 }
 

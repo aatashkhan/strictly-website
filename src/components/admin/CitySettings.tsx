@@ -12,6 +12,7 @@ interface CityData {
   loading_tips: string[] | null;
   custom_vibes: string[] | null;
   image_url: string | null;
+  hidden: boolean;
 }
 
 const TRANSIT_OPTIONS = ["rideshare", "public_transit", "walking_preferred", "rental_car"];
@@ -128,6 +129,27 @@ export default function CitySettings({ cityId, adminFetch }: { cityId: string; a
             <img src={city.image_url} alt={city.city_name} className="w-full h-48 object-cover rounded-lg mb-2" />
           )}
           <input type="file" accept="image/*" onChange={handleCoverUpload} className="text-xs font-mono" />
+        </div>
+
+        {/* Visibility Toggle */}
+        <div className="flex items-center justify-between px-3 py-3 border border-border rounded-lg">
+          <div>
+            <p className="text-xs font-mono text-brown">Hide from itinerary builder</p>
+            <p className="text-[10px] font-mono text-muted/70">When on, this city won&apos;t appear in the consumer city selector or itinerary generation.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => save({ hidden: !city.hidden })}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ml-4 ${
+              city.hidden ? "bg-red-500" : "bg-border"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                city.hidden ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
         </div>
 
         {/* Basic info */}

@@ -71,13 +71,17 @@ function ConciergeContent() {
   // Get venues and loading tips for the selected city
   const [cityVenues, setCityVenues] = useState<Venue[]>([]);
   const [loadingTips, setLoadingTips] = useState<string[]>([]);
+  const [selectedCity, setSelectedCity] = useState<string>("");
+
+  // Fetch city data when city is selected (pre-loads loading tips before form submit)
   useEffect(() => {
-    if (!tripData?.city) {
+    const cityToFetch = selectedCity || tripData?.city;
+    if (!cityToFetch) {
       setCityVenues([]);
       setLoadingTips([]);
       return;
     }
-    fetch(`/api/venues/${encodeURIComponent(tripData.city)}`)
+    fetch(`/api/venues/${encodeURIComponent(cityToFetch)}`)
       .then((r) => r.json())
       .then((data) => {
         setCityVenues(data?.venues ?? []);
@@ -87,7 +91,7 @@ function ConciergeContent() {
         setCityVenues([]);
         setLoadingTips([]);
       });
-  }, [tripData?.city]);
+  }, [selectedCity, tripData?.city]);
 
   const handleFormSubmit = (data: TripFormData) => {
     setTripData(data);
@@ -287,7 +291,7 @@ function ConciergeContent() {
                 city guides.
               </p>
             </div>
-            <TripForm onSubmit={handleFormSubmit} initialCity={initialCity} initialData={tripData} />
+            <TripForm onSubmit={handleFormSubmit} onCityChange={setSelectedCity} initialCity={initialCity} initialData={tripData} />
             <div className="text-center mt-6">
               <button
                 onClick={handleSurpriseMe}

@@ -66,6 +66,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
   const [bookingDifficulty, setBookingDifficulty] = useState(((venue as Record<string, unknown>).booking_difficulty as string) ?? "walk_in");
   const [expectWait, setExpectWait] = useState((venue as Record<string, unknown>).expect_wait === true);
   const [conditionalOnHotel, setConditionalOnHotel] = useState(((venue as Record<string, unknown>).conditional_on_hotel as string) ?? "");
+  const [nearbyGetaway, setNearbyGetaway] = useState((venue as Record<string, unknown>).nearby_getaway === true);
   const [accessExpanded, setAccessExpanded] = useState(venue.category === "eat");
   const [showConditionalHotel, setShowConditionalHotel] = useState(!!((venue as Record<string, unknown>).conditional_on_hotel));
   const [saved, setSaved] = useState(false);
@@ -76,7 +77,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
     name, category, subcategory, neighborhood, dennaNotes,
     price, status, access, needsReview, cityId,
     essential24h, essential48h, essential72h,
-    bookingDifficulty, expectWait, conditionalOnHotel,
+    bookingDifficulty, expectWait, conditionalOnHotel, nearbyGetaway,
   });
 
   // Keep the ref in sync with state
@@ -85,7 +86,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
       name, category, subcategory, neighborhood, dennaNotes,
       price, status, access, needsReview, cityId,
       essential24h, essential48h, essential72h,
-      bookingDifficulty, expectWait, conditionalOnHotel,
+      bookingDifficulty, expectWait, conditionalOnHotel, nearbyGetaway,
     };
   });
 
@@ -108,6 +109,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
     setExpectWait((venue as Record<string, unknown>).expect_wait === true);
     setConditionalOnHotel(((venue as Record<string, unknown>).conditional_on_hotel as string) ?? "");
     setAccessExpanded(venue.category === "eat");
+    setNearbyGetaway((venue as Record<string, unknown>).nearby_getaway === true);
     setShowConditionalHotel(!!((venue as Record<string, unknown>).conditional_on_hotel));
     setSaved(false);
   }, [venue]);
@@ -130,6 +132,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
       booking_difficulty: f.bookingDifficulty,
       expect_wait: f.expectWait,
       conditional_on_hotel: f.conditionalOnHotel || null,
+      nearby_getaway: f.nearbyGetaway,
     };
     // Include city_id only if it changed
     if (f.cityId && f.cityId !== venue.city_id) {
@@ -385,6 +388,29 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Nearby Getaway toggle — only for "stay" category */}
+        {category === "stay" && (
+          <div className="flex items-center justify-between px-3 py-3 border border-border rounded-lg">
+            <div>
+              <p className="text-xs font-mono text-brown">Nearby Getaway</p>
+              <p className="text-[10px] font-mono text-muted/70">Excludes from main hotel list but saves for future getaway feature.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setNearbyGetaway(!nearbyGetaway); debouncedSave(); }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ml-4 ${
+                nearbyGetaway ? "bg-gold" : "bg-border"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  nearbyGetaway ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
           </div>
         )}
 

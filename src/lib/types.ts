@@ -39,6 +39,7 @@ export interface Venue {
   expect_wait?: boolean;
   conditional_on_hotel?: string | null;
   ai_generated_note?: string | null;
+  nearby_getaway?: boolean;
 }
 
 export interface CityData {
