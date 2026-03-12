@@ -184,6 +184,77 @@ export function formatVenueLine(venue: Venue): string {
   return line;
 }
 
+/**
+ * Build a trimmed venue context for refinement calls. Includes:
+ * 1. All venues currently in the itinerary
+ * 2. Up to maxAlternatives additional venues, prioritizing essentials and category diversity
+ */
+export function buildTrimmedVenueContext(
+  cityData: CityData,
+  itineraryVenueNames: string[],
+  selectedHotelName?: string,
+  maxAlternatives: number = 20
+): string {
+  const lines: string[] = [];
+  const hotelName = selectedHotelName?.toLowerCase() ?? "";
+
+  // Filter out private + conditional venues
+  const availableVenues = cityData.venues.filter(v => {
+    if (v.access === 'private') return false;
+    if (v.conditional_on_hotel) {
+      return hotelName.includes(v.conditional_on_hotel.toLowerCase());
+    }
+    return true;
+  });
+
+  // Split into itinerary venues and candidates
+  const nameSet = new Set(itineraryVenueNames.map(n => n.toLowerCase()));
+  const inItinerary = availableVenues.filter(v => nameSet.has(v.name.toLowerCase()));
+  const candidates = availableVenues.filter(v => !nameSet.has(v.name.toLowerCase()));
+
+  // Score candidates: essentials first, then spread categories
+  const categoryCounts = new Map<string, number>();
+  for (const v of inItinerary) {
+    categoryCounts.set(v.category, (categoryCounts.get(v.category) || 0) + 1);
+  }
+
+  const scored = candidates.map(v => {
+    let score = 0;
+    if (v.essential_24h || v.essential_48h || v.essential_72h) score += 10;
+    // Prefer categories underrepresented in the itinerary
+    const catCount = categoryCounts.get(v.category) || 0;
+    score += Math.max(0, 5 - catCount);
+    return { venue: v, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  const selected = scored.slice(0, maxAlternatives).map(s => s.venue);
+
+  const allVenues = [...inItinerary, ...selected];
+
+  lines.push(`VENUE DATABASE (${allVenues.length} venues — ${inItinerary.length} in current itinerary + ${selected.length} alternatives):`);
+  lines.push("");
+
+  // Group by neighborhood
+  const byNeighborhood = new Map<string, Venue[]>();
+  for (const venue of allVenues) {
+    const hood = venue.neighborhood ?? 'Other';
+    if (!byNeighborhood.has(hood)) byNeighborhood.set(hood, []);
+    byNeighborhood.get(hood)!.push(venue);
+  }
+
+  for (const [neighborhood, venues] of Array.from(byNeighborhood.entries())) {
+    lines.push(`  === ${neighborhood} ===`);
+    for (const venue of venues) {
+      lines.push(formatVenueLine(venue));
+    }
+    lines.push("");
+  }
+
+  lines.push("IMPORTANT: Only use venues from the list above. Do not invent or suggest any places not listed.");
+
+  return lines.join("\n");
+}
+
 export function buildUserPrompt(
   tripData: TripFormData,
   cityData: CityData

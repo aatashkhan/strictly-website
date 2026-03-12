@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getCityData } from "@/lib/venues";
-import { buildSystemPrompt, buildVenueContext } from "@/lib/prompts";
+import { buildSystemPrompt, buildTrimmedVenueContext } from "@/lib/prompts";
 import { enrichItinerary } from "@/lib/routing";
 import { getSiteContent } from "@/lib/siteContent";
 import type { TripFormData, ItineraryData } from "@/lib/types";
@@ -114,7 +114,15 @@ export async function POST(request: NextRequest) {
       voiceSettings = undefined;
     }
     const baseSystemPrompt = buildSystemPrompt(voiceSettings && Object.keys(voiceSettings).length > 0 ? voiceSettings : undefined);
-    const venueContext = buildVenueContext(cityData, tripData.hotel?.name);
+
+    // Extract venue names from the current itinerary for trimmed context
+    const itineraryVenueNames: string[] = [];
+    for (const day of itinerary.days) {
+      for (const item of day.items) {
+        if (item.name) itineraryVenueNames.push(item.name);
+      }
+    }
+    const venueContext = buildTrimmedVenueContext(cityData, itineraryVenueNames, tripData.hotel?.name);
 
     // Dynamic refinement instructions (changes per request — not cached)
     const refinementPrompt = `You are now in REFINEMENT MODE. The traveler already has an itinerary and wants to modify it.
