@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getCityData } from "@/lib/venues";
-import { buildSystemPrompt } from "@/lib/prompts";
+import { buildSystemPrompt, buildVenueContext } from "@/lib/prompts";
 import { enrichItinerary } from "@/lib/routing";
 import { getSiteContent } from "@/lib/siteContent";
 import type { TripFormData, ItineraryData } from "@/lib/types";
@@ -113,15 +113,14 @@ export async function POST(request: NextRequest) {
     } catch {
       voiceSettings = undefined;
     }
-    const systemPrompt = `${buildSystemPrompt(voiceSettings && Object.keys(voiceSettings).length > 0 ? voiceSettings : undefined)}
+    const baseSystemPrompt = buildSystemPrompt(voiceSettings && Object.keys(voiceSettings).length > 0 ? voiceSettings : undefined);
+    const venueContext = buildVenueContext(cityData, tripData.hotel?.name);
 
-You are now in REFINEMENT MODE. The traveler already has an itinerary and wants to modify it.
+    // Dynamic refinement instructions (changes per request — not cached)
+    const refinementPrompt = `You are now in REFINEMENT MODE. The traveler already has an itinerary and wants to modify it.
 
 CURRENT ITINERARY:
 ${JSON.stringify(itinerary, null, 2)}
-
-AVAILABLE VENUES FOR ${cityData.city_name}:
-${cityData.venues.map((v) => `- ${v.name} [${v.category}] ${v.neighborhood ?? ""} ${v.address ?? ""}`).join("\n")}
 
 RULES FOR REFINEMENT:
 - When the user asks for changes, apply them to the current itinerary
@@ -163,7 +162,22 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 8000,
-      system: systemPrompt,
+      system: [
+        {
+          type: "text" as const,
+          text: baseSystemPrompt,
+          cache_control: { type: "ephemeral" as const },
+        },
+        {
+          type: "text" as const,
+          text: venueContext,
+          cache_control: { type: "ephemeral" as const },
+        },
+        {
+          type: "text" as const,
+          text: refinementPrompt,
+        },
+      ],
       messages,
     });
 

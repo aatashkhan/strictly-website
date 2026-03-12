@@ -4,7 +4,7 @@ import path from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { getCityData } from "@/lib/venues";
-import { buildSystemPrompt, buildUserPrompt } from "@/lib/prompts";
+import { buildSystemPrompt, buildVenueContext, buildUserPrompt } from "@/lib/prompts";
 import { enrichItinerary } from "@/lib/routing";
 import { getSiteContent } from "@/lib/siteContent";
 import type { TripFormData, ItineraryData, Venue } from "@/lib/types";
@@ -88,12 +88,24 @@ export async function POST(request: NextRequest) {
       voiceSettings = undefined;
     }
     const systemPrompt = buildSystemPrompt(voiceSettings && Object.keys(voiceSettings).length > 0 ? voiceSettings : undefined);
+    const venueContext = buildVenueContext(activeCityData, body.hotel?.name);
     const userPrompt = buildUserPrompt(body, activeCityData);
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 8000,
-      system: systemPrompt,
+      system: [
+        {
+          type: "text" as const,
+          text: systemPrompt,
+          cache_control: { type: "ephemeral" as const },
+        },
+        {
+          type: "text" as const,
+          text: venueContext,
+          cache_control: { type: "ephemeral" as const },
+        },
+      ],
       messages: [{ role: "user", content: userPrompt }],
     });
 

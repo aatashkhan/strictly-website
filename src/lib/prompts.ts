@@ -95,6 +95,95 @@ const TIME_LABELS: Record<string, string> = {
   "late-night": "late at night",
 };
 
+/**
+ * Build the venue database text for a city. This is separated out so it can be
+ * used as a cacheable content block (same text for every call to the same city).
+ */
+export function buildVenueContext(
+  cityData: CityData,
+  selectedHotelName?: string
+): string {
+  const lines: string[] = [];
+
+  if (cityData.denna_intro) {
+    lines.push("DENNA'S CITY INTRO:");
+    lines.push(cityData.denna_intro);
+    lines.push("");
+  }
+
+  // Filter out private venues and hotel-conditional venues that don't match
+  const hotelName = selectedHotelName?.toLowerCase() ?? "";
+  const availableVenues = cityData.venues.filter(v => {
+    if (v.access === 'private') return false;
+    if (v.conditional_on_hotel) {
+      return hotelName.includes(v.conditional_on_hotel.toLowerCase());
+    }
+    return true;
+  });
+  const hasPrivateVenues = cityData.venues.length > availableVenues.length;
+
+  // Group venues by neighborhood for geographic context
+  const byNeighborhood = new Map<string, Venue[]>();
+  for (const venue of availableVenues) {
+    const hood = venue.neighborhood ?? 'Other';
+    if (!byNeighborhood.has(hood)) byNeighborhood.set(hood, []);
+    byNeighborhood.get(hood)!.push(venue);
+  }
+
+  lines.push(`VENUE DATABASE (${availableVenues.length} venues — ONLY use these):`);
+  lines.push("Venues are grouped by neighborhood. Plan each day within 1-2 nearby neighborhoods to minimize travel.");
+  if (hasPrivateVenues) {
+    lines.push("Note: Some venues in this city are members-only clubs and have been excluded from recommendations.");
+  }
+  lines.push("");
+
+  for (const [neighborhood, venues] of Array.from(byNeighborhood.entries())) {
+    lines.push(`  === ${neighborhood} ===`);
+    for (const venue of venues) {
+      lines.push(formatVenueLine(venue));
+    }
+    lines.push("");
+  }
+
+  // Nearby getaway context
+  const getawayVenues = cityData.venues.filter(v => v.nearby_getaway);
+  if (getawayVenues.length > 0) {
+    lines.push("NEARBY GETAWAY HOTELS:");
+    lines.push("- The following hotels are tagged as 'nearby getaway' — they are outside the city center and should NOT be included in the day-by-day itinerary.");
+    lines.push("- They will be shown separately as optional add-on suggestions after the itinerary.");
+    for (const v of getawayVenues) {
+      lines.push(`  - ${v.name}${v.neighborhood ? ` (${v.neighborhood})` : ""}`);
+    }
+    lines.push("");
+  }
+
+  lines.push(
+    "IMPORTANT: Only recommend venues from the database above. Do not invent or suggest any places not listed."
+  );
+
+  return lines.join("\n");
+}
+
+/** Format a single venue line with all metadata tags */
+export function formatVenueLine(venue: Venue): string {
+  let line = `  - ${venue.name} [${venue.category}/${venue.subcategory}]`;
+  if (venue.access === 'members_guests') line += ` (members/guest access only)`;
+  const booking = venue.booking_difficulty ?? 'walk_in';
+  if (booking !== 'walk_in') line += ` [Booking: ${booking}]`;
+  if (venue.expect_wait) line += ` [Expect wait]`;
+  const essentials: string[] = [];
+  if (venue.essential_24h) essentials.push("24hr");
+  if (venue.essential_48h) essentials.push("48hr");
+  if (venue.essential_72h) essentials.push("72hr");
+  if (essentials.length > 0) line += ` [ESSENTIAL for ${essentials.join(", ")} trips]`;
+  if (venue.address) line += ` @ ${venue.address}`;
+  if (venue.denna_note) line += `: ${venue.denna_note}`;
+  if (venue.opening_hours?.weekday_text?.length) {
+    line += ` | Hours: ${venue.opening_hours.weekday_text.join('; ')}`;
+  }
+  return line;
+}
+
 export function buildUserPrompt(
   tripData: TripFormData,
   cityData: CityData
@@ -162,64 +251,6 @@ export function buildUserPrompt(
     }
     hotelLine += `. Use this as the daily home base — consider proximity when planning each day's activities. Start and end each day near the hotel when possible.`;
     lines.push(hotelLine);
-    lines.push("");
-  }
-
-  if (cityData.denna_intro) {
-    lines.push("DENNA'S CITY INTRO:");
-    lines.push(cityData.denna_intro);
-    lines.push("");
-  }
-
-  // Filter out private venues and hotel-conditional venues that don't match
-  const selectedHotelName = tripData.hotel?.name?.toLowerCase() ?? "";
-  const availableVenues = cityData.venues.filter(v => {
-    if (v.access === 'private') return false;
-    // Hard filter: conditional_on_hotel venues only show if user selected that hotel
-    if (v.conditional_on_hotel) {
-      return selectedHotelName.includes(v.conditional_on_hotel.toLowerCase());
-    }
-    return true;
-  });
-  const hasPrivateVenues = cityData.venues.length > availableVenues.length;
-
-  // Group venues by neighborhood for geographic context
-  const byNeighborhood = new Map<string, Venue[]>();
-  for (const venue of availableVenues) {
-    const hood = venue.neighborhood ?? 'Other';
-    if (!byNeighborhood.has(hood)) byNeighborhood.set(hood, []);
-    byNeighborhood.get(hood)!.push(venue);
-  }
-
-  lines.push(`VENUE DATABASE (${availableVenues.length} venues — ONLY use these):`);
-  lines.push("Venues are grouped by neighborhood. Plan each day within 1-2 nearby neighborhoods to minimize travel.");
-  if (hasPrivateVenues) {
-    lines.push("Note: Some venues in this city are members-only clubs and have been excluded from recommendations.");
-  }
-  lines.push("");
-
-  for (const [neighborhood, venues] of Array.from(byNeighborhood.entries())) {
-    lines.push(`  === ${neighborhood} ===`);
-    for (const venue of venues) {
-      let line = `  - ${venue.name} [${venue.category}/${venue.subcategory}]`;
-      if (venue.access === 'members_guests') line += ` (members/guest access only)`;
-      // Booking metadata tags
-      const booking = venue.booking_difficulty ?? 'walk_in';
-      if (booking !== 'walk_in') line += ` [Booking: ${booking}]`;
-      if (venue.expect_wait) line += ` [Expect wait]`;
-      // Essentialness
-      const essentials: string[] = [];
-      if (venue.essential_24h) essentials.push("24hr");
-      if (venue.essential_48h) essentials.push("48hr");
-      if (venue.essential_72h) essentials.push("72hr");
-      if (essentials.length > 0) line += ` [ESSENTIAL for ${essentials.join(", ")} trips]`;
-      if (venue.address) line += ` @ ${venue.address}`;
-      if (venue.denna_note) line += `: ${venue.denna_note}`;
-      if (venue.opening_hours?.weekday_text?.length) {
-        line += ` | Hours: ${venue.opening_hours.weekday_text.join('; ')}`;
-      }
-      lines.push(line);
-    }
     lines.push("");
   }
 
@@ -294,23 +325,6 @@ export function buildUserPrompt(
   lines.push("- Venues tagged [Booking: members_only]: only mention as a contextual aside, never as a primary recommendation (e.g. 'if you know a member of X, check it out').");
   lines.push("- Venues tagged [Expect wait]: NEVER schedule two expect-wait venues back-to-back in the same half-day. Mention the wait in your note (e.g. '(line is long but worth it)').");
   lines.push("- NEVER schedule two hard-to-get-res venues on the same day.");
-  lines.push("");
-
-  // Nearby getaway context — tell Claude not to schedule them but they'll appear as suggestions
-  const getawayVenues = cityData.venues.filter(v => v.nearby_getaway);
-  if (getawayVenues.length > 0) {
-    lines.push("NEARBY GETAWAY HOTELS:");
-    lines.push("- The following hotels are tagged as 'nearby getaway' — they are outside the city center and should NOT be included in the day-by-day itinerary.");
-    lines.push("- They will be shown separately as optional add-on suggestions after the itinerary.");
-    for (const v of getawayVenues) {
-      lines.push(`  - ${v.name}${v.neighborhood ? ` (${v.neighborhood})` : ""}`);
-    }
-    lines.push("");
-  }
-
-  lines.push(
-    "IMPORTANT: Only recommend venues from the database above. Do not invent or suggest any places not listed."
-  );
 
   return lines.join("\n");
 }
