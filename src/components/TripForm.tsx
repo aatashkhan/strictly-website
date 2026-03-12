@@ -71,8 +71,33 @@ export default function TripForm({ onSubmit, initialCity, initialData, cities: c
     if (!init) return [];
     return Array.isArray(init) ? init.filter(t => t !== 'auto') : init === 'auto' ? [] : [init];
   });
+  const [bookingStyleOverride, setBookingStyleOverride] = useState<boolean | null>(null);
   const [durationError, setDurationError] = useState("");
   const [cityVibesData, setCityVibesData] = useState<{ customVibes: string[]; categories: Record<string, number> } | null>(null);
+
+  // Compute days until trip from arrival date
+  const daysUntilTrip = useMemo(() => {
+    const arrDate = arrival?.date;
+    if (!arrDate) return null;
+    const a = new Date(arrDate + "T00:00:00");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((a.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }, [arrival?.date]);
+
+  // Derive bookingStyle from toggle + days
+  const bookingStyle = useMemo((): 'planner' | 'spontaneous' | undefined => {
+    if (daysUntilTrip === null) return undefined;
+    if (daysUntilTrip > 30) {
+      // Default: planner on. Toggle off = spontaneous.
+      const isPlanner = bookingStyleOverride ?? true;
+      return isPlanner ? 'planner' : 'spontaneous';
+    } else {
+      // Default: spontaneous on for < 14 days, off (planner) for 14-30.
+      const isSpontaneous = bookingStyleOverride ?? (daysUntilTrip < 14);
+      return isSpontaneous ? 'spontaneous' : 'planner';
+    }
+  }, [daysUntilTrip, bookingStyleOverride]);
 
   // Fetch city vibes data when city changes
   useEffect(() => {
@@ -219,6 +244,7 @@ export default function TripForm({ onSubmit, initialCity, initialData, cities: c
       departure,
       hotel,
       transitPreference: transitPreferences.length > 0 ? transitPreferences : undefined,
+      bookingStyle,
     });
   };
 
@@ -353,6 +379,45 @@ export default function TripForm({ onSubmit, initialCity, initialData, cities: c
           <p className="mt-2 text-sm font-mono text-gold">{durationError}</p>
         )}
       </div>
+
+      {/* Booking Style Toggle — only shows when dates are set */}
+      {daysUntilTrip !== null && (
+        <div>
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <span
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                bookingStyle === 'spontaneous' ? 'bg-gold' : 'bg-border'
+              }`}
+              onClick={() => {
+                if (daysUntilTrip > 30) {
+                  // Toggle: planner (default on) → spontaneous
+                  setBookingStyleOverride(prev => prev === null ? false : prev === false ? true : false);
+                } else {
+                  // Toggle: spontaneous (default depends on days) → planner
+                  const defaultVal = daysUntilTrip < 14;
+                  setBookingStyleOverride(prev => prev === null ? !defaultVal : !prev);
+                }
+              }}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  bookingStyle === 'spontaneous' ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </span>
+            <span className="text-sm font-mono text-brown group-hover:text-gold transition-colors">
+              {daysUntilTrip > 30
+                ? (bookingStyle === 'planner'
+                    ? "I'm a planner — include spots that need booking ahead"
+                    : "Keep it spontaneous — skip the hard-to-book spots")
+                : (bookingStyle === 'spontaneous'
+                    ? "I'm spontaneous — keep it to walk-in and easy-reservation spots"
+                    : "I'm a planner — include spots that need booking ahead")
+              }
+            </span>
+          </label>
+        </div>
+      )}
 
       {/* Companions */}
       <div>
