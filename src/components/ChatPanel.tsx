@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { ItineraryData, TripFormData } from "@/lib/types";
 
 interface ChatMessage {
@@ -44,6 +44,7 @@ export default function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
   const [showUpdated, setShowUpdated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -52,7 +53,7 @@ export default function ChatPanel({
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, streamingText]);
 
   // Focus input when opened
   useEffect(() => {
@@ -72,7 +73,7 @@ export default function ChatPanel({
     return () => document.removeEventListener("keydown", handleKey);
   }, [isOpen, onClose]);
 
-  const sendMessage = async () => {
+  const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
 
@@ -81,6 +82,7 @@ export default function ChatPanel({
     setMessages(updatedMessages);
     setInput("");
     setLoading(true);
+    setStreamingText("");
 
     try {
       const res = await fetch("/api/chat", {
@@ -101,17 +103,54 @@ export default function ChatPanel({
 
       if (!res.ok) throw new Error("Chat request failed");
 
-      const data = await res.json();
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.message },
-      ]);
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulatedText = "";
 
-      if (data.updatedItinerary) {
-        onUpdate(data.updatedItinerary);
-        setShowUpdated(true);
-        setTimeout(() => setShowUpdated(false), 2500);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === "text") {
+              accumulatedText += event.content;
+              setStreamingText(accumulatedText);
+            } else if (event.type === "itinerary") {
+              onUpdate(event.data);
+              setShowUpdated(true);
+              setTimeout(() => setShowUpdated(false), 2500);
+            } else if (event.type === "done") {
+              // Finalize the assistant message
+              const finalMessage = accumulatedText || event.message || "";
+              if (finalMessage) {
+                setMessages((prev) => [
+                  ...prev,
+                  { role: "assistant", content: finalMessage },
+                ]);
+              }
+              setStreamingText("");
+            } else if (event.type === "error") {
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: "Sorry, something went wrong. Try again?" },
+              ]);
+              setStreamingText("");
+            }
+          } catch {
+            // skip malformed SSE lines
+          }
+        }
       }
     } catch {
       setMessages((prev) => [
@@ -121,10 +160,11 @@ export default function ChatPanel({
           content: "Sorry, something went wrong. Try again?",
         },
       ]);
+      setStreamingText("");
     } finally {
       setLoading(false);
     }
-  };
+  }, [input, loading, messages, itinerary, tripData, location, completedItems, onUpdate]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -172,7 +212,7 @@ export default function ChatPanel({
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {messages.length === 0 && (
+          {messages.length === 0 && !streamingText && (
             <div className="text-center py-12">
               <p className="font-mono text-sm text-muted mb-4">
                 Try something like:
@@ -218,7 +258,18 @@ export default function ChatPanel({
             </div>
           ))}
 
-          {loading && (
+          {/* Streaming text */}
+          {streamingText && (
+            <div className="flex justify-start">
+              <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-sm text-sm font-mono leading-relaxed bg-surface border border-border text-brown">
+                {streamingText}
+                <span className="inline-block w-1.5 h-4 bg-gold/60 ml-0.5 animate-pulse" />
+              </div>
+            </div>
+          )}
+
+          {/* Loading dots (only shown before any streaming starts) */}
+          {loading && !streamingText && (
             <div className="flex justify-start">
               <div className="px-4 py-3 bg-surface border border-border rounded-2xl rounded-bl-sm">
                 <div className="flex gap-1">

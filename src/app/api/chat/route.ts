@@ -49,30 +49,6 @@ function getCityTimezone(city: string): string {
   return "America/New_York"; // fallback
 }
 
-/**
- * Try to extract a JSON object from text that might contain markdown code fences
- * or have the JSON embedded in conversational text.
- */
-function extractJsonFromText(text: string): string | null {
-  // Try code fence extraction first: ```json ... ``` or ``` ... ```
-  const codeFenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (codeFenceMatch) {
-    const inner = codeFenceMatch[1].trim();
-    if (inner.startsWith('{')) return inner;
-  }
-
-  // Try to find a JSON object by matching outermost braces
-  const firstBrace = text.indexOf('{');
-  const lastBrace = text.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    const candidate = text.slice(firstBrace, lastBrace + 1);
-    // Quick sanity check: must have "days" key
-    if (candidate.includes('"days"')) return candidate;
-  }
-
-  return null;
-}
-
 interface ChatContext {
   currentLocation?: { lat: number; lng: number } | null;
   currentTime?: string;
@@ -162,127 +138,154 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
     // Build message history for multi-turn
     const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
     for (const msg of history.slice(0, -1)) {
-      // Strip any JSON from assistant messages for context (keep it concise)
-      const content =
-        msg.role === "assistant"
-          ? msg.content
-          : msg.content;
-      messages.push({ role: msg.role, content });
+      messages.push({ role: msg.role, content: msg.content });
     }
     messages.push({ role: "user", content: message });
 
-    const response = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 8000,
-      system: [
-        {
-          type: "text" as const,
-          text: baseSystemPrompt,
-          cache_control: { type: "ephemeral" as const },
-        },
-        {
-          type: "text" as const,
-          text: venueContext,
-          cache_control: { type: "ephemeral" as const },
-        },
-        {
-          type: "text" as const,
-          text: refinementPrompt,
-        },
-      ],
-      messages,
-    });
+    // Stream the response using SSE
+    const encoder = new TextEncoder();
 
-    const text =
-      response.content[0].type === "text" ? response.content[0].text : "";
-
-    // Check if response contains updated itinerary
-    if (text.includes("---JSON---")) {
-      const [conversational, jsonPart] = text.split("---JSON---");
-      const trimmedJson = jsonPart.trim();
-
-      try {
-        const parsed = JSON.parse(trimmedJson);
-
-        // Validate structure before using
-        if (
-          !parsed ||
-          !Array.isArray(parsed.days) ||
-          parsed.days.length === 0 ||
-          !parsed.days.every((d: { items?: unknown }) => Array.isArray(d.items))
-        ) {
-          // Malformed itinerary — return just the conversation
-          return NextResponse.json({
-            message: (conversational.trim() || text) +
-              "\n\n(I tried to update your itinerary but the format came out wrong — try rephrasing your request.)",
-            updatedItinerary: null,
-          });
-        }
-
-        const updatedItinerary: ItineraryData = {
-          intro: parsed.intro ?? itinerary.intro,
-          days: parsed.days,
-          signoff: parsed.signoff ?? itinerary.signoff,
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendEvent = (data: Record<string, unknown>) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         };
 
-        // Re-enrich with venue matching, travel, hours validation
-        const tripStartDate = tripData.arrival?.date ?? undefined;
-        updatedItinerary.days = enrichItinerary(
-          updatedItinerary.days,
-          cityData.venues,
-          tripStartDate
-        );
+        try {
+          let fullText = "";
+          let hitSeparator = false;
+          let conversationalPart = "";
+          let jsonPart = "";
 
-        return NextResponse.json({
-          message: conversational.trim(),
-          updatedItinerary,
-        });
-      } catch {
-        // JSON parse failed — return just the conversation with a note
-        return NextResponse.json({
-          message: (conversational.trim() || text) +
-            "\n\n(I couldn\u2019t update the itinerary this time — try rephrasing your request.)",
-          updatedItinerary: null,
-        });
-      }
-    }
-
-    // Fallback: try to extract JSON even without the separator
-    // The AI might have wrapped it in code fences or just output JSON directly
-    const fallbackJson = extractJsonFromText(text);
-    if (fallbackJson) {
-      try {
-        const parsed = JSON.parse(fallbackJson);
-        if (parsed && Array.isArray(parsed.days) && parsed.days.length > 0 &&
-            parsed.days.every((d: { items?: unknown }) => Array.isArray(d.items))) {
-          const updatedItinerary: ItineraryData = {
-            intro: parsed.intro ?? itinerary.intro,
-            days: parsed.days,
-            signoff: parsed.signoff ?? itinerary.signoff,
-          };
-          const tripStartDate = tripData.arrival?.date ?? undefined;
-          updatedItinerary.days = enrichItinerary(
-            updatedItinerary.days,
-            cityData.venues,
-            tripStartDate
-          );
-          // Extract conversational part (text before JSON)
-          const jsonStart = text.indexOf(fallbackJson);
-          const conversational = jsonStart > 0 ? text.slice(0, jsonStart).replace(/```json?\s*/gi, '').trim() : "";
-          return NextResponse.json({
-            message: conversational || "Done! I've updated your itinerary.",
-            updatedItinerary,
+          const anthropicStream = client.messages.stream({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 8000,
+            system: [
+              {
+                type: "text" as const,
+                text: baseSystemPrompt,
+                cache_control: { type: "ephemeral" as const },
+              },
+              {
+                type: "text" as const,
+                text: venueContext,
+                cache_control: { type: "ephemeral" as const },
+              },
+              {
+                type: "text" as const,
+                text: refinementPrompt,
+              },
+            ],
+            messages,
           });
-        }
-      } catch {
-        // fallback parse failed, treat as conversation
-      }
-    }
 
-    // No itinerary update — just conversation
-    return NextResponse.json({
-      message: text,
-      updatedItinerary: null,
+          for await (const event of anthropicStream) {
+            if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              const chunk = event.delta.text;
+              fullText += chunk;
+
+              if (!hitSeparator) {
+                // Check if the separator has appeared in the accumulated text
+                if (fullText.includes("---JSON---")) {
+                  hitSeparator = true;
+                  const parts = fullText.split("---JSON---");
+                  conversationalPart = parts[0];
+                  jsonPart = parts[1] || "";
+                  // Don't stream the JSON part to the client
+                } else {
+                  // Stream text tokens to the client
+                  sendEvent({ type: "text", content: chunk });
+                }
+              } else {
+                // After separator, accumulate JSON silently
+                jsonPart += chunk;
+              }
+            }
+          }
+
+          // Process the complete response
+          if (hitSeparator && jsonPart.trim()) {
+            try {
+              const parsed = JSON.parse(jsonPart.trim());
+
+              if (
+                parsed &&
+                Array.isArray(parsed.days) &&
+                parsed.days.length > 0 &&
+                parsed.days.every((d: { items?: unknown }) => Array.isArray(d.items))
+              ) {
+                const updatedItinerary: ItineraryData = {
+                  intro: parsed.intro ?? itinerary.intro,
+                  days: parsed.days,
+                  signoff: parsed.signoff ?? itinerary.signoff,
+                };
+
+                const tripStartDate = tripData.arrival?.date ?? undefined;
+                updatedItinerary.days = enrichItinerary(
+                  updatedItinerary.days,
+                  cityData.venues,
+                  tripStartDate
+                );
+
+                sendEvent({ type: "itinerary", data: updatedItinerary });
+              } else {
+                sendEvent({
+                  type: "text",
+                  content: "\n\n(I tried to update your itinerary but the format came out wrong — try rephrasing your request.)",
+                });
+              }
+            } catch {
+              sendEvent({
+                type: "text",
+                content: "\n\n(I couldn\u2019t update the itinerary this time — try rephrasing your request.)",
+              });
+            }
+          } else if (!hitSeparator) {
+            // No separator found — check for fallback JSON extraction
+            const firstBrace = fullText.indexOf('{');
+            const lastBrace = fullText.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace > firstBrace) {
+              const candidate = fullText.slice(firstBrace, lastBrace + 1);
+              if (candidate.includes('"days"')) {
+                try {
+                  const parsed = JSON.parse(candidate);
+                  if (parsed && Array.isArray(parsed.days) && parsed.days.length > 0) {
+                    const updatedItinerary: ItineraryData = {
+                      intro: parsed.intro ?? itinerary.intro,
+                      days: parsed.days,
+                      signoff: parsed.signoff ?? itinerary.signoff,
+                    };
+                    const tripStartDate = tripData.arrival?.date ?? undefined;
+                    updatedItinerary.days = enrichItinerary(
+                      updatedItinerary.days,
+                      cityData.venues,
+                      tripStartDate
+                    );
+                    sendEvent({ type: "itinerary", data: updatedItinerary });
+                  }
+                } catch {
+                  // fallback parse failed, no itinerary update
+                }
+              }
+            }
+          }
+
+          sendEvent({ type: "done", message: conversationalPart.trim() || fullText });
+          controller.close();
+        } catch (error) {
+          console.error("Stream error:", error);
+          sendEvent({ type: "error", message: "Failed to process chat message." });
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
     });
   } catch (error) {
     console.error("Chat error:", error);
