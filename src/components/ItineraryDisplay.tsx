@@ -389,6 +389,9 @@ export default function ItineraryDisplay({
   const [copiedDay, setCopiedDay] = useState<number | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(isSaved ? "saved" : "idle");
 
+  // Changed days highlight (from AI refinement)
+  const [highlightedDays, setHighlightedDays] = useState<Set<number>>(new Set());
+
   // Swap drawer state
   const [swapTarget, setSwapTarget] = useState<{
     dayIndex: number;
@@ -590,7 +593,11 @@ export default function ItineraryDisplay({
           return (
             <div
               key={day.day}
-              className="border border-border rounded-2xl overflow-hidden"
+              className={`rounded-2xl overflow-hidden transition-all duration-700 ${
+                highlightedDays.has(day.day)
+                  ? "border-2 border-gold shadow-lg shadow-gold/20"
+                  : "border border-border"
+              }`}
             >
               {/* Day header */}
               <button
@@ -600,6 +607,11 @@ export default function ItineraryDisplay({
                 <div className="text-left">
                   <span className="uppercase text-xs tracking-widest text-gold font-mono block mb-1">
                     Day {day.day}{dayDate ? ` \u2014 ${dayDate}` : ""}
+                    {highlightedDays.has(day.day) && (
+                      <span className="ml-2 inline-block px-2 py-0.5 text-[9px] bg-gold/15 border border-gold/40 rounded-full text-gold normal-case tracking-normal">
+                        Updated
+                      </span>
+                    )}
                   </span>
                   <span className="font-mono text-xl font-bold text-brown">
                     {day.title}
@@ -861,7 +873,19 @@ export default function ItineraryDisplay({
         onClose={() => setChatOpen(false)}
         itinerary={itinerary}
         tripData={tripData}
-        onUpdate={updateFromChat}
+        onUpdate={(newItinerary, changedDayNumbers) => {
+          updateFromChat(newItinerary);
+          if (changedDayNumbers && changedDayNumbers.length > 0) {
+            // Auto-open changed days and highlight them
+            setOpenDays(prev => {
+              const next = new Set(prev);
+              for (const d of changedDayNumbers) next.add(d);
+              return next;
+            });
+            setHighlightedDays(new Set(changedDayNumbers));
+            setTimeout(() => setHighlightedDays(new Set()), 4000);
+          }
+        }}
       />
     </div>
   );

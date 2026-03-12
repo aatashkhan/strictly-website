@@ -29,7 +29,6 @@ function ProgressRing({ progress, complete }: { progress: number; complete: bool
   return (
     <div className="relative flex items-center justify-center mb-10">
       <svg width={size} height={size} className="transform -rotate-90">
-        {/* Background circle */}
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -39,7 +38,6 @@ function ProgressRing({ progress, complete }: { progress: number; complete: bool
           strokeWidth={stroke}
           className="text-border"
         />
-        {/* Progress arc */}
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -55,7 +53,6 @@ function ProgressRing({ progress, complete }: { progress: number; complete: bool
           }`}
         />
       </svg>
-      {/* Center content */}
       <div className="absolute inset-0 flex items-center justify-center">
         {complete ? (
           <svg
@@ -79,39 +76,6 @@ function ProgressRing({ progress, complete }: { progress: number; complete: bool
   );
 }
 
-/** Typewriter effect for a single string */
-function TypewriterText({ text, speed = 35 }: { text: string; speed?: number }) {
-  const [displayed, setDisplayed] = useState("");
-  const [currentText, setCurrentText] = useState(text);
-
-  useEffect(() => {
-    if (text !== currentText) {
-      // New phrase — reset and type out
-      setDisplayed("");
-      setCurrentText(text);
-    }
-  }, [text, currentText]);
-
-  useEffect(() => {
-    if (displayed.length >= currentText.length) return;
-
-    const timer = setTimeout(() => {
-      setDisplayed(currentText.slice(0, displayed.length + 1));
-    }, speed);
-
-    return () => clearTimeout(timer);
-  }, [displayed, currentText, speed]);
-
-  return (
-    <span>
-      {displayed}
-      {displayed.length < currentText.length && (
-        <span className="inline-block w-[2px] h-[1.1em] bg-gold/70 ml-[1px] align-text-bottom animate-blink" />
-      )}
-    </span>
-  );
-}
-
 export default function LoadingScreen({ city, loadingTips, progress = 0 }: LoadingScreenProps) {
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
@@ -127,20 +91,15 @@ export default function LoadingScreen({ city, loadingTips, progress = 0 }: Loadi
     setPhraseIndex(0);
   }, [city]);
 
-  // Advance phrases — give enough time for typewriter to finish + a pause
   const advancePhrase = useCallback(() => {
     setPhraseIndex((prev) => (prev + 1) % phrases.length);
   }, [phrases.length]);
 
   useEffect(() => {
-    const currentPhrase = phrases[phraseIndex];
-    // Time to type out + 1.5s pause to read
-    const typingTime = currentPhrase.length * 35 + 1500;
-    const timer = setTimeout(advancePhrase, typingTime);
+    const timer = setTimeout(advancePhrase, 3000);
     return () => clearTimeout(timer);
-  }, [phraseIndex, phrases, advancePhrase]);
+  }, [phraseIndex, advancePhrase]);
 
-  // Completion animation
   useEffect(() => {
     if (progress >= 100) {
       const timer = setTimeout(() => setIsComplete(true), 200);
@@ -151,43 +110,32 @@ export default function LoadingScreen({ city, loadingTips, progress = 0 }: Loadi
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6">
-      {/* Progress ring */}
       <ProgressRing progress={progress} complete={isComplete} />
 
-      {/* City name */}
       {city && (
         <p className="font-mono text-sm text-gold uppercase tracking-widest mb-4">
           {city}
         </p>
       )}
 
-      {/* Typewriter phrase */}
       <p className="font-mono text-lg text-muted text-center max-w-md h-8">
         {isComplete ? (
           <span className="text-green-600 transition-opacity duration-300">
             Your itinerary is ready!
           </span>
         ) : (
-          <TypewriterText key={phraseIndex} text={phrases[phraseIndex]} />
+          phrases[phraseIndex]
         )}
       </p>
 
-      {/* Custom keyframe styles */}
       <style jsx>{`
         @keyframes scale-check {
           0% { transform: scale(0); opacity: 0; }
           50% { transform: scale(1.2); }
           100% { transform: scale(1); opacity: 1; }
         }
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
         :global(.animate-scale-check) {
           animation: scale-check 0.4s ease-out forwards;
-        }
-        :global(.animate-blink) {
-          animation: blink 0.6s ease-in-out infinite;
         }
       `}</style>
     </div>

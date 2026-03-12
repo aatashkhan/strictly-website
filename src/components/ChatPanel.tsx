@@ -13,7 +13,7 @@ interface ChatPanelProps {
   onClose: () => void;
   itinerary: ItineraryData;
   tripData: TripFormData;
-  onUpdate: (itinerary: ItineraryData) => void;
+  onUpdate: (itinerary: ItineraryData, changedDays?: number[]) => void;
   completedItems?: string[];
 }
 
@@ -127,7 +127,7 @@ export default function ChatPanel({
               accumulatedText += event.content;
               setStreamingText(accumulatedText);
             } else if (event.type === "itinerary") {
-              onUpdate(event.data);
+              onUpdate(event.data, event.changedDays);
               setShowUpdated(true);
               setTimeout(() => setShowUpdated(false), 2500);
             } else if (event.type === "done") {
