@@ -225,7 +225,8 @@ export default function CitySettings({ cityId, adminFetch }: { cityId: string; a
 
         {/* Custom Vibes */}
         <div>
-          <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-2">Custom Vibes</label>
+          <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Custom Vibes</label>
+          <p className="text-[10px] font-mono text-muted/70 mb-2">Custom vibes are the mood/activity tags shown to users when building a trip for this city (e.g. &quot;Wine &amp; Cocktails&quot;, &quot;Art &amp; Culture&quot;). Leave blank to use defaults.</p>
           <div className="flex flex-wrap gap-2 mb-2">
             {(city.custom_vibes ?? []).map((vibe, i) => (
               <span key={i} className="inline-flex items-center gap-1 px-3 py-1 bg-surface rounded-full text-xs font-mono text-brown">
