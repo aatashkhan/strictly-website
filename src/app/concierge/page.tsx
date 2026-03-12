@@ -72,6 +72,7 @@ function ConciergeContent() {
   const [cityVenues, setCityVenues] = useState<Venue[]>([]);
   const [loadingTips, setLoadingTips] = useState<string[]>([]);
   const [selectedCity, setSelectedCity] = useState<string>("");
+  const [generationProgress, setGenerationProgress] = useState(0);
 
   // Fetch city data when city is selected (pre-loads loading tips before form submit)
   useEffect(() => {
@@ -134,10 +135,14 @@ function ConciergeContent() {
   };
 
   const generateItinerary = async (data: TripFormData) => {
+    setGenerationProgress(0);
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify(data),
       });
 
@@ -145,12 +150,44 @@ function ConciergeContent() {
         throw new Error("Failed to generate itinerary");
       }
 
-      const result = await response.json();
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let result: ItineraryData | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "progress") {
+              setGenerationProgress(event.percent);
+            } else if (event.type === "result") {
+              result = event.data;
+            } else if (event.type === "error") {
+              throw new Error(event.message);
+            }
+          } catch (e) {
+            if (e instanceof SyntaxError) continue; // skip malformed SSE
+            throw e;
+          }
+        }
+      }
+
       setItinerary(result);
       setView("itinerary");
 
       // Send itinerary email if user provided an email
-      if (data.email) {
+      if (data.email && result) {
         fetch("/api/send-itinerary", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -313,7 +350,7 @@ function ConciergeContent() {
         />
       )}
 
-      {view === "loading" && <LoadingScreen city={tripData?.city} loadingTips={loadingTips} />}
+      {view === "loading" && <LoadingScreen city={tripData?.city} loadingTips={loadingTips} progress={generationProgress} />}
 
       {view === "itinerary" && tripData && (
         <section className="pt-32 pb-20">
