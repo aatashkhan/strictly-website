@@ -41,6 +41,12 @@ const CATEGORIES = ["eat", "drink", "stay", "explore", "shop", "spa"];
 const PRICE_OPTIONS = ["", "$", "$$", "$$$", "$$$$"];
 const STATUS_OPTIONS = ["open", "closed", "temporarily_closed"];
 const ACCESS_OPTIONS = ["public", "private", "members_guests"];
+const BOOKING_DIFFICULTY_OPTIONS = [
+  { value: "walk_in", label: "Walk in" },
+  { value: "easy_res", label: "Easy reservation" },
+  { value: "hard_to_get_res", label: "Hard to get reservation" },
+  { value: "members_only", label: "Members only" },
+];
 
 export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, adminFetch }: VenueEditorProps) {
   const fetchFn = adminFetch ?? fetch;
@@ -52,28 +58,34 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
   const [price, setPrice] = useState(venue.price_indicator ?? "");
   const [status, setStatus] = useState(venue.status ?? "open");
   const [access, setAccess] = useState(venue.access ?? "public");
-  const [displayOrder, setDisplayOrder] = useState(venue.display_order?.toString() ?? "");
   const [needsReview, setNeedsReview] = useState(venue.needs_review);
   const [cityId, setCityId] = useState(venue.city_id ?? "");
   const [essential24h, setEssential24h] = useState((venue as Record<string, unknown>).essential_24h === true);
   const [essential48h, setEssential48h] = useState((venue as Record<string, unknown>).essential_48h === true);
   const [essential72h, setEssential72h] = useState((venue as Record<string, unknown>).essential_72h === true);
+  const [bookingDifficulty, setBookingDifficulty] = useState(((venue as Record<string, unknown>).booking_difficulty as string) ?? "walk_in");
+  const [expectWait, setExpectWait] = useState((venue as Record<string, unknown>).expect_wait === true);
+  const [conditionalOnHotel, setConditionalOnHotel] = useState(((venue as Record<string, unknown>).conditional_on_hotel as string) ?? "");
+  const [accessExpanded, setAccessExpanded] = useState(venue.category === "eat");
+  const [showConditionalHotel, setShowConditionalHotel] = useState(!!((venue as Record<string, unknown>).conditional_on_hotel));
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // Use a ref to always have the latest form values for the debounced save
   const formRef = useRef({
     name, category, subcategory, neighborhood, dennaNotes,
-    price, status, access, displayOrder, needsReview, cityId,
+    price, status, access, needsReview, cityId,
     essential24h, essential48h, essential72h,
+    bookingDifficulty, expectWait, conditionalOnHotel,
   });
 
   // Keep the ref in sync with state
   useEffect(() => {
     formRef.current = {
       name, category, subcategory, neighborhood, dennaNotes,
-      price, status, access, displayOrder, needsReview, cityId,
+      price, status, access, needsReview, cityId,
       essential24h, essential48h, essential72h,
+      bookingDifficulty, expectWait, conditionalOnHotel,
     };
   });
 
@@ -87,12 +99,16 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
     setPrice(venue.price_indicator ?? "");
     setStatus(venue.status ?? "open");
     setAccess(venue.access ?? "public");
-    setDisplayOrder(venue.display_order?.toString() ?? "");
     setNeedsReview(venue.needs_review);
     setCityId(venue.city_id ?? "");
     setEssential24h((venue as Record<string, unknown>).essential_24h === true);
     setEssential48h((venue as Record<string, unknown>).essential_48h === true);
     setEssential72h((venue as Record<string, unknown>).essential_72h === true);
+    setBookingDifficulty(((venue as Record<string, unknown>).booking_difficulty as string) ?? "walk_in");
+    setExpectWait((venue as Record<string, unknown>).expect_wait === true);
+    setConditionalOnHotel(((venue as Record<string, unknown>).conditional_on_hotel as string) ?? "");
+    setAccessExpanded(venue.category === "eat");
+    setShowConditionalHotel(!!((venue as Record<string, unknown>).conditional_on_hotel));
     setSaved(false);
   }, [venue]);
 
@@ -107,11 +123,13 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
       price_indicator: f.price || null,
       status: f.status,
       access: f.access,
-      display_order: f.displayOrder ? parseInt(f.displayOrder, 10) : null,
       needs_review: f.needsReview,
       essential_24h: f.essential24h,
       essential_48h: f.essential48h,
       essential_72h: f.essential72h,
+      booking_difficulty: f.bookingDifficulty,
+      expect_wait: f.expectWait,
+      conditional_on_hotel: f.conditionalOnHotel || null,
     };
     // Include city_id only if it changed
     if (f.cityId && f.cityId !== venue.city_id) {
@@ -301,16 +319,74 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
           </div>
         </div>
 
-        {/* Display Order */}
-        <div>
-          <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Display Order</label>
-          <input
-            type="number"
-            value={displayOrder}
-            onChange={(e) => { setDisplayOrder(e.target.value); debouncedSave(); }}
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream focus:outline-none focus:border-gold"
-          />
-        </div>
+        {/* How to get in — category-aware access settings */}
+        {category !== "stay" && (
+          <div className="border border-border rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setAccessExpanded(!accessExpanded)}
+              className="w-full flex items-center justify-between px-3 py-2 text-[10px] uppercase tracking-widest text-muted font-mono hover:bg-cream/50 transition-colors"
+            >
+              <span>{category === "eat" ? "How to get in" : "Access settings (optional)"}</span>
+              <span className="text-xs">{accessExpanded ? "▾" : "▸"}</span>
+            </button>
+            {accessExpanded && (
+              <div className="px-3 pb-3 space-y-3 border-t border-border pt-3">
+                {category === "eat" && (
+                  <p className="text-[10px] font-mono text-muted/70">How easy is it to get a table? This directly affects which trips Claude recommends this restaurant for.</p>
+                )}
+                {/* Booking Difficulty */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Booking Difficulty</label>
+                  <select
+                    value={bookingDifficulty}
+                    onChange={(e) => { setBookingDifficulty(e.target.value); debouncedSave(); }}
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream"
+                  >
+                    {BOOKING_DIFFICULTY_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* Expect a Wait */}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setExpectWait(!expectWait); debouncedSave(); }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-colors ${
+                      expectWait
+                        ? "bg-gold/15 border-gold/40 text-gold"
+                        : "border-border text-muted hover:border-gold/30"
+                    }`}
+                  >
+                    {expectWait ? "Expect a wait" : "No wait expected"}
+                  </button>
+                </div>
+                {/* Conditional on Hotel — collapsible */}
+                {!showConditionalHotel ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowConditionalHotel(true)}
+                    className="text-[10px] font-mono text-muted hover:text-gold transition-colors"
+                  >
+                    + Conditional on hotel (rare)
+                  </button>
+                ) : (
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Conditional on Hotel</label>
+                    <p className="text-[10px] font-mono text-muted/70 mb-1">Only recommend if user is staying at this hotel (e.g. &quot;Aman Tokyo&quot;)</p>
+                    <input
+                      value={conditionalOnHotel}
+                      onChange={(e) => { setConditionalOnHotel(e.target.value); debouncedSave(); }}
+                      placeholder="Hotel name..."
+                      className="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream focus:outline-none focus:border-gold"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Needs Review toggle */}
         <div className="flex items-center gap-3">
