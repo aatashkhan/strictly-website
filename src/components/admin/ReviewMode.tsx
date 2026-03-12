@@ -13,6 +13,7 @@ interface ReviewVenue {
   instagram: string | null;
   google_maps_url: string | null;
   needs_review: boolean;
+  image_url: string | null;
   cities?: { city_name: string };
 }
 
@@ -31,18 +32,31 @@ export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: Rev
   const [neighborhood, setNeighborhood] = useState("");
   const [loading, setLoading] = useState(true);
   const [totalReviewed, setTotalReviewed] = useState(0);
+  const [totalVenueCount, setTotalVenueCount] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   const loadReviewQueue = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ needs_review: "true", sort: "name", limit: "500" });
     if (city) params.set("city", city);
 
-    const res = await fetchFn(`/api/admin/venues?${params}`);
+    // Fetch unreviewed venues and total count in parallel
+    const totalParams = new URLSearchParams({ sort: "name", limit: "1" });
+    if (city) totalParams.set("city", city);
+
+    const [res, totalRes] = await Promise.all([
+      fetchFn(`/api/admin/venues?${params}`),
+      fetchFn(`/api/admin/venues?${totalParams}`),
+    ]);
     const data = await res.json();
+    const totalData = await totalRes.json();
     setVenues(data.venues ?? []);
+    setTotalVenueCount(totalData.total ?? 0);
+    setTotalReviewed((totalData.total ?? 0) - (data.total ?? (data.venues?.length ?? 0)));
     setCurrentIndex(0);
     setLoading(false);
-  }, [city]);
+  }, [city, fetchFn]);
 
   useEffect(() => {
     loadReviewQueue();
@@ -54,8 +68,29 @@ export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: Rev
     if (current) {
       setNote(current.denna_note ?? "");
       setNeighborhood(current.neighborhood ?? "");
+      setImageUrl(current.image_url ?? null);
     }
   }, [current]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !current) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", "venues");
+    const res = await fetchFn("/api/admin/upload", { method: "POST", body: formData });
+    if (res.ok) {
+      const { url } = await res.json();
+      setImageUrl(url);
+      await fetchFn(`/api/admin/venues/${current.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_url: url }),
+      });
+    }
+    setUploading(false);
+  };
 
   const saveAndNext = async () => {
     if (!current) return;
@@ -129,11 +164,11 @@ export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: Rev
           <div className="w-48 h-2 bg-border rounded-full overflow-hidden">
             <div
               className="h-full bg-gold rounded-full transition-all"
-              style={{ width: `${((currentIndex + 1) / venues.length) * 100}%` }}
+              style={{ width: `${totalVenueCount > 0 ? (totalReviewed / totalVenueCount) * 100 : 0}%` }}
             />
           </div>
           <span className="font-mono text-xs text-muted">
-            {currentIndex + 1} of {venues.length} ({totalReviewed} reviewed)
+            {currentIndex + 1} of {venues.length} remaining ({totalReviewed} of {totalVenueCount} reviewed)
           </span>
         </div>
       </div>
@@ -171,6 +206,22 @@ export default function ReviewMode({ city, onClose, onRefresh, adminFetch }: Rev
               placeholder="Enter neighborhood..."
               className="w-full px-4 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream focus:outline-none focus:border-gold"
             />
+          </div>
+
+          {/* Photo */}
+          <div className="mb-4">
+            <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Photo</label>
+            {imageUrl ? (
+              <img src={imageUrl} alt="" className="w-full h-40 object-cover rounded-lg mb-2" />
+            ) : (
+              <div className="w-full h-24 bg-surface border border-dashed border-border rounded-lg flex items-center justify-center mb-2">
+                <span className="font-mono text-xs text-muted">No photo</span>
+              </div>
+            )}
+            <label className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-mono border border-border cursor-pointer hover:border-gold transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
+              {uploading ? "Uploading..." : imageUrl ? "Replace photo" : "Upload photo"}
+              <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+            </label>
           </div>
 
           {/* Denna's Note - the main field */}
