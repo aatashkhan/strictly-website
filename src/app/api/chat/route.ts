@@ -134,18 +134,19 @@ RULES FOR REFINEMENT:
 
 RESPONSE FORMAT — FOLLOW THIS EXACTLY:
 
-If MODIFYING the itinerary:
-1. First write 1-2 sentences in Denna's voice about what you changed (plain text, no tags)
-2. Then on a new line write exactly: ---JSON---
-3. Then output ONLY the changed days as a JSON array. Example:
+If MODIFYING the itinerary, output JSON FIRST, then explanation:
 ---JSON---
 [{"day":2,"title":"Day Title","items":[{"time":"9:00 AM","endTime":"10:30 AM","type":"eat","name":"Venue Name","note":"Denna's note about it","duration":90}]}]
+---END---
+One sentence about what you changed, in Denna's voice.
 
-CRITICAL RULES:
+RULES:
+- Start your response with ---JSON--- immediately (no text before it)
 - Only include days you actually changed, not all days
-- The JSON must be a plain array of day objects: [{"day":N,"title":"...","items":[...]}]
+- JSON is a plain array: [{"day":N,"title":"...","items":[...]}]
 - Each item needs: time, type, name, note. Optional: endTime, duration
-- After ---JSON--- output ONLY the JSON array. No markdown, no backticks, no extra text.
+- No markdown, no backticks around the JSON
+- After ---END--- write exactly one sentence explaining the change
 
 If NOT modifying (just answering a question), respond conversationally. Do not include ---JSON---.${
       context?.currentTime || context?.currentLocation || (context?.completedItems && context.completedItems.length > 0)
@@ -173,13 +174,14 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
 
         try {
           let fullText = "";
-          let hitSeparator = false;
-          let conversationalPart = "";
+          let inJson = false;
+          let pastJson = false;
           let jsonPart = "";
+          let explanationPart = "";
 
           const anthropicStream = client.messages.stream({
             model: "claude-haiku-4-5-20251001",
-            max_tokens: 4000,
+            max_tokens: 6000,
             system: [
               {
                 type: "text" as const,
@@ -204,33 +206,59 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
               const chunk = event.delta.text;
               fullText += chunk;
 
-              if (!hitSeparator) {
+              if (!inJson && !pastJson) {
+                // Haven't entered JSON block yet
                 if (fullText.includes("---JSON---")) {
-                  hitSeparator = true;
-                  const parts = fullText.split("---JSON---");
-                  conversationalPart = parts[0];
-                  jsonPart = parts[1] || "";
+                  inJson = true;
+                  jsonPart = fullText.split("---JSON---")[1] || "";
+                  // Check if ---END--- is already in this chunk
+                  if (jsonPart.includes("---END---")) {
+                    const endParts = jsonPart.split("---END---");
+                    jsonPart = endParts[0];
+                    explanationPart = endParts[1] || "";
+                    inJson = false;
+                    pastJson = true;
+                  }
                 } else {
-                  // Stream text but strip any XML-like tags
-                  const clean = chunk.replace(/<\/?explanation>/g, "");
-                  if (clean) sendEvent({ type: "text", content: clean });
+                  // No JSON separator — this is conversational text, stream it
+                  sendEvent({ type: "text", content: chunk });
+                }
+              } else if (inJson) {
+                // Inside JSON block — accumulate silently
+                jsonPart += chunk;
+                // Check if ---END--- has appeared
+                if (jsonPart.includes("---END---")) {
+                  const endParts = jsonPart.split("---END---");
+                  jsonPart = endParts[0];
+                  explanationPart = endParts[1] || "";
+                  inJson = false;
+                  pastJson = true;
                 }
               } else {
-                jsonPart += chunk;
+                // Past the JSON block — stream the explanation
+                explanationPart += chunk;
+                sendEvent({ type: "text", content: chunk });
               }
             }
           }
 
-          // Process the complete response
-          if (hitSeparator && jsonPart.trim()) {
+          // Process the response
+          const hasJson = fullText.includes("---JSON---");
+          // If model didn't use ---END---, grab everything after JSON separator
+          if (hasJson && !jsonPart && !pastJson) {
+            jsonPart = fullText.split("---JSON---")[1] || "";
+          }
+
+          if (hasJson && jsonPart.trim()) {
             try {
-              // Strip markdown code fences if present
+              // Strip markdown fences, ---END--- remnants, trailing explanation
               let jsonStr = jsonPart.trim();
               jsonStr = jsonStr.replace(/^```json?\s*/i, "").replace(/\s*```$/, "");
+              jsonStr = jsonStr.replace(/---END---[\s\S]*$/, "").trim();
 
               const parsed = JSON.parse(jsonStr);
 
-              // Support both array format and object wrapper
+              // Support array, object wrapper, or single day
               let changedDays: ItineraryDay[];
               if (Array.isArray(parsed)) {
                 changedDays = parsed;
@@ -239,7 +267,6 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
               } else if (parsed.days) {
                 changedDays = parsed.days;
               } else if (parsed.day && parsed.items) {
-                // Single day object returned unwrapped
                 changedDays = [parsed];
               } else {
                 changedDays = [];
@@ -289,16 +316,14 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
                 content: "\n\n(I couldn\u2019t update the itinerary this time — try rephrasing your request.)",
               });
             }
-          } else if (!hitSeparator) {
-            // No separator found — try to extract JSON from the full text
-            // Look for array [...] or object {...} containing day data
+          } else if (!hasJson) {
+            // No JSON separator at all — try fallback extraction
             const firstBracket = fullText.indexOf('[');
             const lastBracket = fullText.lastIndexOf(']');
             const firstBrace = fullText.indexOf('{');
             const lastBrace = fullText.lastIndexOf('}');
 
             let candidate = "";
-            // Prefer array format (our requested format)
             if (firstBracket !== -1 && lastBracket > firstBracket) {
               candidate = fullText.slice(firstBracket, lastBracket + 1);
             } else if (firstBrace !== -1 && lastBrace > firstBrace) {
@@ -339,10 +364,8 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
             }
           }
 
-          // Clean up any XML tags from the final message
-          const finalMsg = (conversationalPart.trim() || fullText)
-            .replace(/<\/?explanation>/g, "")
-            .trim();
+          // Send the explanation text as the final message
+          const finalMsg = explanationPart.trim() || (hasJson ? "" : fullText);
           sendEvent({ type: "done", message: finalMsg });
           controller.close();
         } catch (error) {
