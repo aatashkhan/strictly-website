@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient } from "@supabase/supabase-js";
 import { getCityData } from "@/lib/venues";
 import { buildSystemPrompt, buildUserPrompt } from "@/lib/prompts";
 import { enrichItinerary } from "@/lib/routing";
 import { getSiteContent } from "@/lib/siteContent";
-import type { TripFormData, ItineraryData } from "@/lib/types";
+import type { TripFormData, ItineraryData, Venue } from "@/lib/types";
 
 const client = new Anthropic();
 
@@ -30,6 +31,30 @@ async function storeEmail(email: string, city: string): Promise<boolean> {
   } catch (err) {
     console.error("Failed to store email:", err);
     return false;
+  }
+}
+
+/** Save Claude's generated venue notes to ai_generated_note (only if field is empty) */
+async function saveVenueBlurbs(itinerary: ItineraryData, venues: Venue[]) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!serviceKey || !url) return;
+
+  const supabase = createClient(url, serviceKey);
+
+  for (const day of itinerary.days) {
+    for (const item of day.items) {
+      if (!item.note || !item.venueId) continue;
+      // Only save if the venue doesn't already have an ai_generated_note
+      const venue = venues.find(v => v.id === item.venueId);
+      if (venue?.ai_generated_note) continue;
+
+      await supabase
+        .from("venues")
+        .update({ ai_generated_note: item.note })
+        .eq("id", item.venueId)
+        .is("ai_generated_note", null);
+    }
   }
 }
 
@@ -86,6 +111,11 @@ export async function POST(request: NextRequest) {
       body.hotel?.lat,
       body.hotel?.lng,
       body.transitPreference
+    );
+
+    // 2F: Save Claude's generated venue blurbs (non-blocking, best-effort)
+    saveVenueBlurbs(itinerary, activeVenues).catch(err =>
+      console.error("Failed to save venue blurbs:", err)
     );
 
     return NextResponse.json(itinerary);
