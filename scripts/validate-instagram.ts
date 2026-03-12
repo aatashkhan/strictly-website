@@ -1,14 +1,16 @@
 /**
  * Instagram Link Validator
  *
- * Iterates through all venues with Instagram URLs, makes a HEAD request to each,
- * and outputs a report of broken links as JSON.
+ * Uses Instagram's oEmbed API to check if accounts actually exist.
+ * Unlike fetching the profile page (which always returns HTTP 200 and renders
+ * "sorry, this page isn't available" client-side via React), the oEmbed
+ * endpoint returns real HTTP error codes for non-existent accounts.
  *
  * Usage: npx tsx scripts/validate-instagram.ts
  *
  * Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.
- * You can set them in .env.local or pass them inline:
- *   NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... npx tsx scripts/validate-instagram.ts
+ * Source them from .env.local or pass inline:
+ *   source .env.local && npx tsx scripts/validate-instagram.ts
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -34,57 +36,55 @@ interface BrokenLink {
   reason: string;
 }
 
+/**
+ * Uses Instagram's oEmbed API to check if a profile actually exists.
+ * Unlike the profile page (which always returns HTTP 200 and renders errors
+ * client-side via React), the oEmbed endpoint returns real HTTP error codes:
+ *   - 200 with JSON → account exists
+ *   - 400 → account does not exist / "sorry, this page isn't available"
+ *   - 404 → same, non-existent
+ */
 async function checkInstagramUrl(url: string): Promise<{ status: number | "error"; reason: string }> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    // Normalize to a proper profile URL for the oEmbed lookup
+    const profileUrl = url.startsWith("http")
+      ? url
+      : `https://www.instagram.com/${url.replace(/^@/, "")}/`;
 
-    const res = await fetch(url, {
-      method: "HEAD",
-      redirect: "follow",
+    const oembedUrl = `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(profileUrl)}`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch(oembedUrl, {
+      method: "GET",
       signal: controller.signal,
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
       },
     });
 
     clearTimeout(timeout);
 
-    // Instagram returns 200 even for "page not available" sometimes,
-    // but a 404 or redirect to login is a clear signal
-    if (res.status === 404) {
-      return { status: 404, reason: "Page not found" };
-    }
-    if (res.status === 302 || res.status === 301) {
-      const location = res.headers.get("location") || "";
-      if (location.includes("/accounts/login")) {
-        return { status: res.status, reason: "Redirects to login (likely deleted/private)" };
-      }
-    }
-    if (res.status >= 400) {
-      return { status: res.status, reason: `HTTP ${res.status}` };
-    }
-
-    // For 200 responses, do a GET to check for "page isn't available" text
     if (res.status === 200) {
-      const getRes = await fetch(url, {
-        method: "GET",
-        redirect: "follow",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        },
-      });
-      const body = await getRes.text();
-      if (body.includes("Sorry, this page isn") || body.includes("this page is not available")) {
-        return { status: 200, reason: "Page not available (soft 404)" };
-      }
+      // oEmbed returned data — account exists
+      return { status: 200, reason: "OK" };
     }
 
-    return { status: res.status, reason: "OK" };
+    if (res.status === 400 || res.status === 404) {
+      return { status: res.status, reason: "Account does not exist (oEmbed 400/404)" };
+    }
+
+    if (res.status === 429) {
+      return { status: 429, reason: "Rate limited — retry later" };
+    }
+
+    return { status: res.status, reason: `oEmbed HTTP ${res.status}` };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     if (message.includes("abort")) {
-      return { status: "error", reason: "Timeout (10s)" };
+      return { status: "error", reason: "Timeout (15s)" };
     }
     return { status: "error", reason: message };
   }
@@ -116,6 +116,7 @@ async function main() {
   console.log(`Found ${venues.length} venues with Instagram URLs. Checking...`);
 
   const broken: BrokenLink[] = [];
+  const rateLimited: typeof venues = [];
   let checked = 0;
 
   for (const venue of venues) {
@@ -126,7 +127,10 @@ async function main() {
 
     const result = await checkInstagramUrl(url);
 
-    if (result.reason !== "OK") {
+    if (result.status === 429) {
+      // Save for retry after a longer pause
+      rateLimited.push(venue);
+    } else if (result.reason !== "OK") {
       broken.push({
         venue_id: venue.id,
         venue_name: venue.name,
@@ -138,11 +142,37 @@ async function main() {
     }
 
     if (checked % 25 === 0) {
-      console.log(`  Checked ${checked}/${venues.length} (${broken.length} broken so far)...`);
+      console.log(`  Checked ${checked}/${venues.length} (${broken.length} broken, ${rateLimited.length} rate-limited)...`);
     }
 
-    // Rate limit: wait 500ms between requests to avoid being blocked
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Rate limit: 1s between requests to stay under Instagram's limits
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  // Retry rate-limited URLs with longer delays
+  if (rateLimited.length > 0) {
+    console.log(`\nRetrying ${rateLimited.length} rate-limited URLs after 30s pause...`);
+    await new Promise((resolve) => setTimeout(resolve, 30000));
+
+    for (const venue of rateLimited) {
+      const url = venue.instagram.startsWith("http")
+        ? venue.instagram
+        : `https://instagram.com/${venue.instagram.replace(/^@/, "")}`;
+
+      const result = await checkInstagramUrl(url);
+      if (result.reason !== "OK" && result.status !== 429) {
+        broken.push({
+          venue_id: venue.id,
+          venue_name: venue.name,
+          city_name: cityMap.get(venue.city_id) || "Unknown",
+          instagram_url: url,
+          status: result.status,
+          reason: result.reason,
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
   }
 
   console.log(`\nDone! Checked ${checked} URLs.`);

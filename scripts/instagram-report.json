@@ -1,0 +1,46 @@
+{
+  "checked": 205,
+  "broken_count": 5,
+  "broken": [
+    {
+      "venue_id": "3a6a768f-d316-4276-9d63-a5cceab6d12f",
+      "venue_name": "Babbo Collective Parkveien",
+      "city_name": "Oslo",
+      "instagram_url": "https://www.instagram.com/babbocollective_/?hl=en",
+      "status": 404,
+      "reason": "Account does not exist (oEmbed 400/404)"
+    },
+    {
+      "venue_id": "3f3e46b6-7b45-4e4d-9efa-c6154ea26d18",
+      "venue_name": "Frenchie Bar a Vins",
+      "city_name": "Paris",
+      "instagram_url": "https://www.instagram.com/explore/locations/184343518722485/frenchie-bar-a-vins/?hl=en",
+      "status": 400,
+      "reason": "Account does not exist (oEmbed 400/404)"
+    },
+    {
+      "venue_id": "ea1f1b6d-b2af-4fa3-b8ac-3c5629898b9a",
+      "venue_name": "Bobby Vintage",
+      "city_name": "Paris",
+      "instagram_url": "https://www.instagram.com/bobby.in.paris/?hl=en",
+      "status": 404,
+      "reason": "Account does not exist (oEmbed 400/404)"
+    },
+    {
+      "venue_id": "07223689-8f0d-4d99-92dd-2f54e71972df",
+      "venue_name": "Carette",
+      "city_name": "Paris",
+      "instagram_url": "https://www.instagram.com/caretteofficiel/?hl=en",
+      "status": 404,
+      "reason": "Account does not exist (oEmbed 400/404)"
+    },
+    {
+      "venue_id": "29dbb151-b50a-4604-875f-c1311ba91891",
+      "venue_name": "Soho House Rome",
+      "city_name": "Rome",
+      "instagram_url": "https://www.instagram.com/sohohouseroma/?hl=en",
+      "status": 404,
+      "reason": "Account does not exist (oEmbed 400/404)"
+    }
+  ]
+}
