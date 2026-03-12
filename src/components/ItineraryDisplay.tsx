@@ -296,6 +296,83 @@ function copyDayToClipboard(day: ItineraryDay, dayDate: string | null) {
   });
 }
 
+function NearbyGetawaySuggestions({ venues, city }: { venues: Venue[]; city: string }) {
+  const getaways = useMemo(
+    () => venues.filter((v) => v.nearby_getaway && v.category === "stay" && v.status !== "closed"),
+    [venues]
+  );
+
+  if (getaways.length === 0) return null;
+
+  return (
+    <div className="mt-12 border border-stay/20 rounded-2xl p-6 bg-stay/5">
+      <p className="uppercase text-xs tracking-widest text-stay font-mono mb-1">
+        Nearby Getaways
+      </p>
+      <p className="font-mono text-secondary text-sm leading-relaxed mb-4">
+        Interested in extending your trip? Consider adding a night outside {city}:
+      </p>
+      <div className="space-y-3">
+        {getaways.map((v) => {
+          const imgs = v.image_urls?.length ? v.image_urls : v.image_url ? [v.image_url] : [];
+          const img = imgs.length > 0 ? imgs[0] : null;
+          return (
+            <div
+              key={v.id}
+              className="flex items-start gap-4 p-4 bg-surface border border-border rounded-xl"
+            >
+              {img && (
+                <img
+                  src={img}
+                  alt={v.name}
+                  className="w-16 h-16 object-cover rounded-lg shrink-0"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-mono text-sm font-medium text-brown">{v.name}</p>
+                {v.neighborhood && (
+                  <p className="text-[11px] font-mono text-muted">{v.neighborhood}</p>
+                )}
+                {v.denna_note && (
+                  <p className="text-xs font-mono text-secondary mt-1 line-clamp-2">
+                    {v.denna_note}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-3 mt-2">
+                  {v.website && (
+                    <a
+                      href={v.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-mono text-stay hover:underline"
+                    >
+                      Website &rarr;
+                    </a>
+                  )}
+                  {v.instagram && (
+                    <a
+                      href={
+                        v.instagram.startsWith("http")
+                          ? v.instagram
+                          : `https://instagram.com/${v.instagram.replace(/^@/, "")}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-mono text-stay hover:underline"
+                    >
+                      Instagram &rarr;
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function ItineraryDisplay({
   data,
   tripData,
@@ -737,6 +814,9 @@ export default function ItineraryDisplay({
           {itinerary.signoff}
         </p>
       </div>
+
+      {/* Nearby getaway suggestions */}
+      <NearbyGetawaySuggestions venues={venues} city={tripData.city} />
 
       {/* Full trip overview map */}
       <div className="mt-12">

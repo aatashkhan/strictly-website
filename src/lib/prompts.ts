@@ -286,6 +286,18 @@ export function buildUserPrompt(
   lines.push("- NEVER schedule two hard-to-get-res venues on the same day.");
   lines.push("");
 
+  // Nearby getaway context — tell Claude not to schedule them but they'll appear as suggestions
+  const getawayVenues = cityData.venues.filter(v => v.nearby_getaway);
+  if (getawayVenues.length > 0) {
+    lines.push("NEARBY GETAWAY HOTELS:");
+    lines.push("- The following hotels are tagged as 'nearby getaway' — they are outside the city center and should NOT be included in the day-by-day itinerary.");
+    lines.push("- They will be shown separately as optional add-on suggestions after the itinerary.");
+    for (const v of getawayVenues) {
+      lines.push(`  - ${v.name}${v.neighborhood ? ` (${v.neighborhood})` : ""}`);
+    }
+    lines.push("");
+  }
+
   lines.push(
     "IMPORTANT: Only recommend venues from the database above. Do not invent or suggest any places not listed."
   );
