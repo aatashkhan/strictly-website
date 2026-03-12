@@ -35,6 +35,10 @@ export interface Venue {
   essential_24h?: boolean;
   essential_48h?: boolean;
   essential_72h?: boolean;
+  booking_difficulty?: 'walk_in' | 'easy_res' | 'hard_to_get_res' | 'members_only';
+  expect_wait?: boolean;
+  conditional_on_hotel?: string | null;
+  ai_generated_note?: string | null;
 }
 
 export interface CityData {
@@ -94,6 +98,7 @@ export interface TripFormData {
   departure: FlightInfo | null;
   hotel: HotelSelection | null;
   transitPreference?: TransitMode | TransitMode[];
+  bookingStyle?: 'planner' | 'spontaneous';
 }
 
 export interface TravelSegment {

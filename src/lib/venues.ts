@@ -106,6 +106,13 @@ function transformVenue(row: Record<string, unknown>): Venue {
     access: (row.access as Venue["access"]) ?? "public",
     status: (row.status as Venue["status"]) ?? "open",
     status_note: (row.status_note as string) ?? undefined,
+    essential_24h: (row.essential_24h as boolean) ?? false,
+    essential_48h: (row.essential_48h as boolean) ?? false,
+    essential_72h: (row.essential_72h as boolean) ?? false,
+    booking_difficulty: (row.booking_difficulty as Venue["booking_difficulty"]) ?? "walk_in",
+    expect_wait: (row.expect_wait as boolean) ?? false,
+    conditional_on_hotel: (row.conditional_on_hotel as string) ?? null,
+    ai_generated_note: (row.ai_generated_note as string) ?? null,
   };
 }
 
