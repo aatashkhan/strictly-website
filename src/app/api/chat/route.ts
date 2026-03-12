@@ -129,17 +129,21 @@ RULES FOR REFINEMENT:
 - Maintain Denna's voice throughout
 - Support action commands: skip a venue, add a venue, reorder stops, adjust times
 
-CRITICAL RESPONSE FORMAT:
-When making changes to the itinerary, your response MUST be in two parts:
+CRITICAL RESPONSE FORMAT — YOU MUST FOLLOW THIS EXACTLY:
 
-PART 1: A brief, warm explanation of what you changed (1-3 sentences in Denna's voice)
+If you are MODIFYING the itinerary, respond in EXACTLY this format:
 
-PART 2: The separator line, exactly as shown:
+<explanation>1-3 sentences in Denna's voice about what you changed</explanation>
 ---JSON---
+{"intro":"...","days":[...],"signoff":"..."}
 
-PART 3: The COMPLETE updated itinerary as raw JSON (no markdown, no backticks, just the JSON object)
+Rules:
+- The separator MUST be exactly: ---JSON---  (three dashes, the word JSON, three dashes, on its own line)
+- After ---JSON--- output ONLY raw JSON. No markdown, no backticks, no explanation.
+- The JSON must be the COMPLETE updated itinerary with ALL days and items, not just the changed parts.
+- The JSON format is: { "intro": "...", "days": [{ "day": 1, "title": "...", "items": [{ "time": "9:00 AM", "endTime": "10:30 AM", "type": "eat", "name": "Exact Venue Name", "note": "...", "duration": 90 }] }], "signoff": "..." }
 
-If you CANNOT or SHOULD NOT make changes (just answering a question), respond conversationally WITHOUT including ---JSON--- at all.${
+If you are NOT modifying the itinerary (just answering a question), respond conversationally. Do NOT include ---JSON--- in conversational responses.${
       context?.currentTime || context?.currentLocation || (context?.completedItems && context.completedItems.length > 0)
         ? `
 
@@ -160,7 +164,7 @@ LIVE CONTEXT:${context.currentTime ? `\nCurrent time: ${new Date(context.current
     messages.push({ role: "user", content: message });
 
     const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 8000,
       system: [
         {
