@@ -1,6 +1,18 @@
 import Link from "next/link";
 
-const cards = [
+interface CardData {
+  heading: string;
+  description: string;
+  cta: string;
+  href: string;
+  external: boolean;
+}
+
+interface ThreeCardsProps {
+  cards?: CardData[];
+}
+
+const defaultCards: CardData[] = [
   {
     heading: "Your Trip, Curated",
     description:
@@ -27,11 +39,13 @@ const cards = [
   },
 ];
 
-export default function ThreeCards() {
+export default function ThreeCards({ cards }: ThreeCardsProps) {
+  const data = cards ?? defaultCards;
+
   return (
     <section className="max-w-6xl mx-auto px-6 py-28">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {cards.map((card) => {
+        {data.map((card) => {
           const inner = (
             <div className="bg-light rounded-2xl p-8 border border-border hover:-translate-y-1 transition-transform duration-300 h-full flex flex-col">
               <h3 className="font-mono text-2xl text-brown mb-4">

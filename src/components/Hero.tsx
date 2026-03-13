@@ -1,6 +1,13 @@
 import Link from "next/link";
 
-const cities = [
+interface HeroProps {
+  headline?: string;
+  subtitle?: string;
+  ctaText?: string;
+  scrollingCities?: string[];
+}
+
+const defaultCities = [
   "Paris",
   "Rome",
   "Tokyo",
@@ -15,7 +22,14 @@ const cities = [
   "Amalfi",
 ];
 
-export default function Hero() {
+export default function Hero({
+  headline = "Your next favorite place is waiting.",
+  subtitle = "Curated city guides, restaurant picks, and travel itineraries — all personally tested and approved.",
+  ctaText = "Plan My Trip →",
+  scrollingCities,
+}: HeroProps) {
+  const cities = scrollingCities ?? defaultCities;
+
   return (
     <section className="min-h-screen flex flex-col items-center justify-center bg-cream px-6 relative overflow-hidden">
       <div className="max-w-3xl text-center">
@@ -26,13 +40,12 @@ export default function Hero() {
 
         {/* Main heading */}
         <h1 className="font-mono font-bold text-5xl md:text-7xl text-brown leading-[1.1] mb-8">
-          Your next favorite place is waiting.
+          {headline}
         </h1>
 
         {/* Subtitle */}
         <p className="text-secondary font-mono text-lg max-w-lg mx-auto mb-12 leading-[1.7]">
-          Curated city guides, restaurant picks, and travel itineraries — all
-          personally tested and approved.
+          {subtitle}
         </p>
 
         {/* CTA */}
@@ -40,7 +53,7 @@ export default function Hero() {
           href="/concierge"
           className="inline-block px-10 py-4 bg-gold text-white font-mono text-sm tracking-wide rounded-full hover:bg-gold/90 transition-colors"
         >
-          Plan My Trip &rarr;
+          {ctaText}
         </Link>
       </div>
 

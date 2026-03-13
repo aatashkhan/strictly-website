@@ -2,14 +2,28 @@
 
 import { useState } from "react";
 
-const socialLinks = [
-  { label: "Instagram", href: "#" },
-  { label: "TikTok", href: "#" },
-  { label: "Pinterest", href: "#" },
-];
+interface FooterProps {
+  signupHeading?: string;
+  contactEmail?: string;
+  instagramUrl?: string;
+  tiktokUrl?: string;
+  pinterestUrl?: string;
+}
 
-export default function Footer() {
+export default function Footer({
+  signupHeading = "Get the good stuff in your inbox",
+  contactEmail = "denna@strictlythegoodstuff.com",
+  instagramUrl = "#",
+  tiktokUrl = "#",
+  pinterestUrl = "#",
+}: FooterProps) {
   const [email, setEmail] = useState("");
+
+  const socialLinks = [
+    { label: "Instagram", href: instagramUrl },
+    { label: "TikTok", href: tiktokUrl },
+    { label: "Pinterest", href: pinterestUrl },
+  ];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +37,7 @@ export default function Footer() {
         {/* Email signup */}
         <div className="max-w-md mx-auto text-center mb-14">
           <h3 className="font-mono text-2xl text-brown mb-6">
-            Get the good stuff in your inbox
+            {signupHeading}
           </h3>
           <form onSubmit={handleSubmit} className="flex gap-3">
             <input
@@ -59,10 +73,10 @@ export default function Footer() {
         {/* Contact */}
         <div className="text-center mb-4">
           <a
-            href="mailto:denna@strictlythegoodstuff.com"
+            href={`mailto:${contactEmail}`}
             className="text-sm font-mono text-secondary hover:text-gold transition-colors"
           >
-            denna@strictlythegoodstuff.com
+            {contactEmail}
           </a>
         </div>
 
