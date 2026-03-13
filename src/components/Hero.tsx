@@ -59,7 +59,7 @@ export default function Hero({
 
       {/* Scrolling city names */}
       <div className="absolute bottom-12 left-0 right-0 overflow-hidden">
-        <div className="flex animate-[scroll_30s_linear_infinite] whitespace-nowrap">
+        <div className="flex animate-scroll whitespace-nowrap">
           {[...cities, ...cities].map((city, i) => (
             <span
               key={i}
