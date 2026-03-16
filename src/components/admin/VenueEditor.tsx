@@ -65,6 +65,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
   const [essential72h, setEssential72h] = useState((venue as Record<string, unknown>).essential_72h === true);
   const [bookingDifficulty, setBookingDifficulty] = useState(((venue as Record<string, unknown>).booking_difficulty as string) ?? "walk_in");
   const [expectWait, setExpectWait] = useState((venue as Record<string, unknown>).expect_wait === true);
+  const [longLine, setLongLine] = useState((venue as Record<string, unknown>).long_line === true);
   const [conditionalOnHotel, setConditionalOnHotel] = useState(((venue as Record<string, unknown>).conditional_on_hotel as string) ?? "");
   const [nearbyGetaway, setNearbyGetaway] = useState((venue as Record<string, unknown>).nearby_getaway === true);
   const [accessExpanded, setAccessExpanded] = useState(venue.category === "eat");
@@ -77,7 +78,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
     name, category, subcategory, neighborhood, dennaNotes,
     price, status, access, needsReview, cityId,
     essential24h, essential48h, essential72h,
-    bookingDifficulty, expectWait, conditionalOnHotel, nearbyGetaway,
+    bookingDifficulty, expectWait, longLine, conditionalOnHotel, nearbyGetaway,
   });
 
   // Keep the ref in sync with state
@@ -86,7 +87,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
       name, category, subcategory, neighborhood, dennaNotes,
       price, status, access, needsReview, cityId,
       essential24h, essential48h, essential72h,
-      bookingDifficulty, expectWait, conditionalOnHotel, nearbyGetaway,
+      bookingDifficulty, expectWait, longLine, conditionalOnHotel, nearbyGetaway,
     };
   });
 
@@ -107,6 +108,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
     setEssential72h((venue as Record<string, unknown>).essential_72h === true);
     setBookingDifficulty(((venue as Record<string, unknown>).booking_difficulty as string) ?? "walk_in");
     setExpectWait((venue as Record<string, unknown>).expect_wait === true);
+    setLongLine((venue as Record<string, unknown>).long_line === true);
     setConditionalOnHotel(((venue as Record<string, unknown>).conditional_on_hotel as string) ?? "");
     setAccessExpanded(venue.category === "eat");
     setNearbyGetaway((venue as Record<string, unknown>).nearby_getaway === true);
@@ -131,6 +133,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
       essential_72h: f.essential72h,
       booking_difficulty: f.bookingDifficulty,
       expect_wait: f.expectWait,
+      long_line: f.longLine,
       conditional_on_hotel: f.conditionalOnHotel || null,
       nearby_getaway: f.nearbyGetaway,
     };
@@ -351,19 +354,32 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
                     ))}
                   </select>
                 </div>
-                {/* Expect a Wait */}
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => { setExpectWait(!expectWait); debouncedSave(); }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-colors ${
-                      expectWait
-                        ? "bg-gold/15 border-gold/40 text-gold"
-                        : "border-border text-muted hover:border-gold/30"
-                    }`}
-                  >
-                    {expectWait ? "Expect a wait" : "No wait expected"}
-                  </button>
+                {/* Wait / Line */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Line / Wait</label>
+                  <div className="flex items-center gap-2">
+                    {([
+                      { label: "No line", wait: false, line: false },
+                      { label: "Expect a wait", wait: true, line: false },
+                      { label: "Long line", wait: true, line: true },
+                    ] as const).map((opt) => {
+                      const isActive = expectWait === opt.wait && longLine === opt.line;
+                      return (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          onClick={() => { setExpectWait(opt.wait); setLongLine(opt.line); debouncedSave(); }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-colors ${
+                            isActive
+                              ? "bg-gold/15 border-gold/40 text-gold"
+                              : "border-border text-muted hover:border-gold/30"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 {/* Conditional on Hotel — collapsible */}
                 {!showConditionalHotel ? (

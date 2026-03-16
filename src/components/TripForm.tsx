@@ -64,7 +64,7 @@ export default function TripForm({ onSubmit, onCityChange, initialCity, initialD
   const [duration, setDuration] = useState(initialData?.duration ?? "");
   const [companions, setCompanions] = useState(initialData?.companions ?? "");
   const [vibes, setVibes] = useState<string[]>(initialData?.vibes ?? []);
-  const [budget, setBudget] = useState(initialData?.budget ?? "");
+  const [budget, setBudget] = useState(initialData?.budget ?? "Treat yourself");
   const [pace, setPace] = useState(initialData?.pace ?? "balanced");
   const [notes, setNotes] = useState(initialData?.notes ?? "");
   const [transitPreferences, setTransitPreferences] = useState<TransitMode[]>(() => {
@@ -137,9 +137,9 @@ export default function TripForm({ onSubmit, onCityChange, initialCity, initialD
     const autoVibes: string[] = [];
     const cats = cityVibesData.categories;
     if ((cats.spa ?? 0) > 3) autoVibes.push("Spa & Wellness");
-    if ((cats.drink ?? 0) > 5) autoVibes.push("Wine & Cocktails");
+    if ((cats.drink ?? 0) > 3) autoVibes.push("Drinks");
     if ((cats.explore ?? 0) > 5) autoVibes.push("Sightseeing");
-    if ((cats.shop ?? 0) > 5) autoVibes.push("Boutique Shopping");
+    if ((cats.shop ?? 0) > 5) autoVibes.push("Shopping");
 
     const custom = cityVibesData.customVibes;
     if (custom.length === 0 && autoVibes.length === 0) return VIBES;
@@ -160,7 +160,8 @@ export default function TripForm({ onSubmit, onCityChange, initialCity, initialD
     for (const v of autoVibes) {
       if (!seen.has(v)) {
         seen.add(v);
-        merged.push({ label: v, emoji: v === "Spa & Wellness" ? "🧖‍♀️" : v === "Wine & Cocktails" ? "🍷" : v === "Sightseeing" ? "🏛️" : "🛍️" });
+        const emojiMap: Record<string, string> = { "Spa & Wellness": "\u{1F9D6}\u200D\u2640\uFE0F", "Drinks": "\u{1F378}", "Sightseeing": "\u{1F3DB}\uFE0F", "Shopping": "\u{1F6CD}" };
+        merged.push({ label: v, emoji: emojiMap[v] ?? "\u2728" });
       }
     }
     // Defaults
@@ -322,23 +323,17 @@ export default function TripForm({ onSubmit, onCityChange, initialCity, initialD
                   We don&apos;t have a guide to that city yet. Here&apos;s where we can take you:
                 </p>
               )}
-              {(filteredCities.length > 0 ? filteredCities : allCities).map((c) => {
-                const meta = allMetas.find((m) => m.city_name === c);
-                return (
+              {(filteredCities.length > 0 ? filteredCities : allCities).map((c) => (
                   <button
                     key={c}
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => handleCitySelect(c)}
-                    className="w-full text-left px-4 py-3 text-sm font-mono text-brown hover:bg-light flex justify-between items-center transition-colors"
+                    className="w-full text-left px-4 py-3 text-sm font-mono text-brown hover:bg-light transition-colors"
                   >
-                    <span>{c}</span>
-                    <span className="text-xs text-muted">
-                      {meta?.venue_count ?? 0} spots
-                    </span>
+                    {c}
                   </button>
-                );
-              })}
+              ))}
             </div>
           )}
         </div>

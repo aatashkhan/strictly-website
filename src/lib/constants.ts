@@ -42,6 +42,7 @@ export const CATEGORY_CONFIG: Record<
 
 export const VIBES = [
   { label: "Foodie", emoji: "\u{1F35D}" },
+  { label: "Drinks", emoji: "\u{1F378}" },
   { label: "Culture", emoji: "\u{1F3A8}" },
   { label: "Shopping", emoji: "\u{1F6CD}" },
   { label: "Romance", emoji: "\u{1F48B}" },

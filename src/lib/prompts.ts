@@ -64,6 +64,7 @@ SCHEDULING RULES:
 - Every full day MUST include at least breakfast, lunch, AND dinner
 - Arrange each day in strict chronological meal order: breakfast → morning activity → lunch → afternoon activity → pre-dinner drinks → dinner → evening drinks/nightlife
 - Partial days (arrival/departure) should include whatever meals fall in the available window
+- DRINKS LIMIT: Include at most 2 drink venues per day — typically one pre-dinner (aperitivo/cocktails) and one post-dinner (nightcap/bar). Do NOT schedule 3+ cocktail bars in a single evening.
 
 RESPOND IN THIS EXACT JSON FORMAT (no markdown, no backticks, just raw JSON):
 {
@@ -170,7 +171,8 @@ export function formatVenueLine(venue: Venue): string {
   if (venue.access === 'members_guests') line += ` (members/guest access only)`;
   const booking = venue.booking_difficulty ?? 'walk_in';
   if (booking !== 'walk_in') line += ` [Booking: ${booking}]`;
-  if (venue.expect_wait) line += ` [Expect wait]`;
+  if (venue.long_line) line += ` [Long line]`;
+  else if (venue.expect_wait) line += ` [Expect wait]`;
   const essentials: string[] = [];
   if (venue.essential_24h) essentials.push("24hr");
   if (venue.essential_48h) essentials.push("48hr");
@@ -394,7 +396,8 @@ export function buildUserPrompt(
     lines.push("- Trip is > 30 days out (or no date given): include everything, just note booking requirements where relevant.");
   }
   lines.push("- Venues tagged [Booking: members_only]: only mention as a contextual aside, never as a primary recommendation (e.g. 'if you know a member of X, check it out').");
-  lines.push("- Venues tagged [Expect wait]: NEVER schedule two expect-wait venues back-to-back in the same half-day. Mention the wait in your note (e.g. '(line is long but worth it)').");
+  lines.push("- Venues tagged [Expect wait]: NEVER schedule two expect-wait venues back-to-back in the same half-day. Mention the wait in your note (e.g. '(expect a short wait)').");
+  lines.push("- Venues tagged [Long line]: This spot has a notoriously long line. Only include at most one per day and clearly warn in your note (e.g. '(line is long but worth it — go early or be prepared to wait)').");
   lines.push("- NEVER schedule two hard-to-get-res venues on the same day.");
 
   return lines.join("\n");

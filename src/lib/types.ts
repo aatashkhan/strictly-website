@@ -37,6 +37,7 @@ export interface Venue {
   essential_72h?: boolean;
   booking_difficulty?: 'walk_in' | 'easy_res' | 'hard_to_get_res' | 'members_only';
   expect_wait?: boolean;
+  long_line?: boolean;
   conditional_on_hotel?: string | null;
   ai_generated_note?: string | null;
   nearby_getaway?: boolean;
