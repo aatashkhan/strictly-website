@@ -118,6 +118,7 @@ function transformVenue(row: Record<string, unknown>): Venue {
     ai_generated_note: (row.ai_generated_note as string) ?? null,
     image_urls: (row.image_urls as string[]) ?? [],
     nearby_getaway: (row.nearby_getaway as boolean) ?? false,
+    long_line: (row.long_line as boolean) ?? false,
   };
 }
 
