@@ -49,22 +49,18 @@ function normalizeUsername(raw: string): string {
 
 /**
  * Check if an Instagram username resolves to a real account.
- * Uses web_profile_info API which returns 404 for dead accounts.
+ * Uses the oEmbed API which reliably returns 200 for valid and 404 for dead accounts
+ * from server-side Node.js (unlike web_profile_info which requires browser cookies).
  */
 async function checkAccount(username: string): Promise<{ valid: boolean; status: number }> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
+    const profileUrl = `https://www.instagram.com/${encodeURIComponent(username)}/`;
     const res = await fetch(
-      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`,
-      {
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-          "X-IG-App-ID": "936619743392459",
-        },
-      }
+      `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(profileUrl)}`,
+      { signal: controller.signal }
     );
 
     clearTimeout(timeout);
@@ -78,12 +74,25 @@ async function main() {
   console.log(`Instagram link validator (${fix ? "FIX mode — will remove dead links" : "DRY RUN — report only"})\n`);
 
   // Fetch all venues with instagram set
-  const { data: venues, error } = await supabase
+  // Try with deleted_at filter; fall back if column doesnt exist yet
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let result: any = await supabase
     .from("venues")
     .select("id, name, instagram, city_id")
     .not("instagram", "is", null)
     .neq("instagram", "")
     .is("deleted_at", null);
+
+  if (result.error?.code === "42703") {
+    console.log("(deleted_at column not found — skipping soft-delete filter)\n");
+    result = await supabase
+      .from("venues")
+      .select("id, name, instagram, city_id")
+      .not("instagram", "is", null)
+      .neq("instagram", "");
+  }
+
+  const { data: venues, error } = result;
 
   if (error) {
     console.error("Failed to fetch venues:", error);
