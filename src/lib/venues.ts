@@ -43,19 +43,15 @@ export async function getCityMetas(): Promise<CityMeta[]> {
   const visibleCities = cities.filter((c) => !c.hidden);
 
   // Fetch ALL venue data — paginate because Supabase caps at 1000 rows per request
-  // Check if deleted_at column exists (migration may not have run yet)
-  const hasDeletedAt = !(await supabase.from("venues").select("city_id").is("deleted_at", null).limit(1)).error;
-
   const allVenues: { city_id: string; neighborhood: string | null }[] = [];
   const PAGE_SIZE = 1000;
   let offset = 0;
   while (true) {
-    let query = supabase
+    const { data, error: venueErr } = await supabase
       .from("venues")
-      .select("city_id, neighborhood");
-    if (hasDeletedAt) query = query.is("deleted_at", null);
-
-    const { data, error: venueErr } = await query.range(offset, offset + PAGE_SIZE - 1);
+      .select("city_id, neighborhood")
+      .is("deleted_at", null)
+      .range(offset, offset + PAGE_SIZE - 1);
     if (venueErr) {
       console.error("getCityMetas venue query error:", venueErr.message);
       break;
@@ -148,15 +144,11 @@ export async function getCityData(cityName: string): Promise<CityData | null> {
 
   if (cityErr || !city) return null;
 
-  // Check if deleted_at column exists (migration may not have run yet)
-  const hasDeletedAt = !(await supabase.from("venues").select("id").is("deleted_at", null).limit(1)).error;
-
-  let venueQuery = supabase
+  const { data: venues, error: venueErr } = await supabase
     .from("venues")
     .select("*")
-    .eq("city_id", city.id);
-  if (hasDeletedAt) venueQuery = venueQuery.is("deleted_at", null);
-  const { data: venues, error: venueErr } = await venueQuery
+    .eq("city_id", city.id)
+    .is("deleted_at", null)
     .order("display_order", { ascending: true, nullsFirst: false });
 
   if (venueErr) console.error("getCityData venue query error:", venueErr.message);
