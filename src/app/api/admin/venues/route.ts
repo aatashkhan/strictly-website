@@ -18,10 +18,18 @@ export async function GET(request: NextRequest) {
   const sort = url.searchParams.get("sort") || "needs_review_first";
   const limit = parseInt(url.searchParams.get("limit") || "100", 10);
   const offset = parseInt(url.searchParams.get("offset") || "0", 10);
+  const trash = url.searchParams.get("trash") === "true";
 
   let query = supabase
     .from("venues")
     .select("*, cities!inner(city_name, country)", { count: "exact" });
+
+  // Soft-delete filter: show trash or live venues
+  if (trash) {
+    query = query.not("deleted_at", "is", null);
+  } else {
+    query = query.is("deleted_at", null);
+  }
 
   if (city) {
     query = query.eq("cities.city_name", city);

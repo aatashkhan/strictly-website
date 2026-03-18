@@ -1,16 +1,13 @@
 /**
  * Instagram Link Validator
  *
- * Uses Instagram's oEmbed API to check if accounts actually exist.
- * Unlike fetching the profile page (which always returns HTTP 200 and renders
- * "sorry, this page isn't available" client-side via React), the oEmbed
- * endpoint returns real HTTP error codes for non-existent accounts.
+ * Checks if each venue's Instagram account actually exists by using
+ * Instagram's web_profile_info API, which returns 404 for dead accounts
+ * (unlike the profile page which always returns 200).
  *
- * Usage: npx tsx scripts/validate-instagram.ts
- *
- * Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars.
- * Source them from .env.local or pass inline:
- *   source .env.local && npx tsx scripts/validate-instagram.ts
+ * Usage:
+ *   npx dotenv -e .env.local -- npx tsx scripts/validate-instagram.ts          # dry run
+ *   npx dotenv -e .env.local -- npx tsx scripts/validate-instagram.ts --fix    # remove dead links
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -26,78 +23,67 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const fix = process.argv.includes("--fix");
 
 interface BrokenLink {
   venue_id: string;
   venue_name: string;
   city_name: string;
-  instagram_url: string;
+  instagram_raw: string;
+  username: string;
   status: number | "error";
   reason: string;
 }
 
+/** Normalize instagram field to a clean username */
+function normalizeUsername(raw: string): string {
+  let username = raw.trim();
+  // Strip full URLs
+  username = username.replace(/^https?:\/\/(www\.)?instagram\.com\//, "");
+  // Strip trailing slash and query params
+  username = username.replace(/[\/?#].*$/, "");
+  // Strip @ prefix
+  username = username.replace(/^@/, "");
+  return username;
+}
+
 /**
- * Uses Instagram's oEmbed API to check if a profile actually exists.
- * Unlike the profile page (which always returns HTTP 200 and renders errors
- * client-side via React), the oEmbed endpoint returns real HTTP error codes:
- *   - 200 with JSON → account exists
- *   - 400 → account does not exist / "sorry, this page isn't available"
- *   - 404 → same, non-existent
+ * Check if an Instagram username resolves to a real account.
+ * Uses web_profile_info API which returns 404 for dead accounts.
  */
-async function checkInstagramUrl(url: string): Promise<{ status: number | "error"; reason: string }> {
+async function checkAccount(username: string): Promise<{ valid: boolean; status: number }> {
   try {
-    // Normalize to a proper profile URL for the oEmbed lookup
-    const profileUrl = url.startsWith("http")
-      ? url
-      : `https://www.instagram.com/${url.replace(/^@/, "")}/`;
-
-    const oembedUrl = `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(profileUrl)}`;
-
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const res = await fetch(oembedUrl, {
-      method: "GET",
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json",
-      },
-    });
+    const res = await fetch(
+      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`,
+      {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+          "X-IG-App-ID": "936619743392459",
+        },
+      }
+    );
 
     clearTimeout(timeout);
-
-    if (res.status === 200) {
-      // oEmbed returned data — account exists
-      return { status: 200, reason: "OK" };
-    }
-
-    if (res.status === 400 || res.status === 404) {
-      return { status: res.status, reason: "Account does not exist (oEmbed 400/404)" };
-    }
-
-    if (res.status === 429) {
-      return { status: 429, reason: "Rate limited — retry later" };
-    }
-
-    return { status: res.status, reason: `oEmbed HTTP ${res.status}` };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    if (message.includes("abort")) {
-      return { status: "error", reason: "Timeout (15s)" };
-    }
-    return { status: "error", reason: message };
+    return { valid: res.status === 200, status: res.status };
+  } catch {
+    return { valid: false, status: 0 };
   }
 }
 
 async function main() {
-  console.log("Fetching venues with Instagram URLs...");
+  console.log(`Instagram link validator (${fix ? "FIX mode — will remove dead links" : "DRY RUN — report only"})\n`);
 
+  // Fetch all venues with instagram set
   const { data: venues, error } = await supabase
     .from("venues")
     .select("id, name, instagram, city_id")
     .not("instagram", "is", null)
-    .neq("instagram", "");
+    .neq("instagram", "")
+    .is("deleted_at", null);
 
   if (error) {
     console.error("Failed to fetch venues:", error);
@@ -105,7 +91,7 @@ async function main() {
   }
 
   if (!venues || venues.length === 0) {
-    console.log("No venues with Instagram URLs found.");
+    console.log("No venues with Instagram links found.");
     return;
   }
 
@@ -113,81 +99,134 @@ async function main() {
   const { data: cities } = await supabase.from("cities").select("id, city_name");
   const cityMap = new Map((cities || []).map((c: { id: string; city_name: string }) => [c.id, c.city_name]));
 
-  console.log(`Found ${venues.length} venues with Instagram URLs. Checking...`);
+  console.log(`Found ${venues.length} venues with Instagram links. Checking...\n`);
 
   const broken: BrokenLink[] = [];
+  const malformed: BrokenLink[] = [];
   const rateLimited: typeof venues = [];
   let checked = 0;
 
   for (const venue of venues) {
     checked++;
-    const url = venue.instagram.startsWith("http")
-      ? venue.instagram
-      : `https://instagram.com/${venue.instagram.replace(/^@/, "")}`;
+    const username = normalizeUsername(venue.instagram);
+    const cityName = cityMap.get(venue.city_id) || "Unknown";
 
-    const result = await checkInstagramUrl(url);
+    if (!username || username.includes(" ") || username.length > 30) {
+      malformed.push({
+        venue_id: venue.id,
+        venue_name: venue.name,
+        city_name: cityName,
+        instagram_raw: venue.instagram,
+        username,
+        status: "error",
+        reason: "Malformed username",
+      });
+      console.log(`  MALFORMED  ${venue.name} (${cityName}) — "${venue.instagram}"`);
+      continue;
+    }
 
-    if (result.status === 429) {
-      // Save for retry after a longer pause
+    const { valid, status } = await checkAccount(username);
+
+    if (status === 429) {
       rateLimited.push(venue);
-    } else if (result.reason !== "OK") {
+      console.log(`  RATE LIMITED  ${venue.name} (${cityName}) — @${username}`);
+    } else if (!valid) {
       broken.push({
         venue_id: venue.id,
         venue_name: venue.name,
-        city_name: cityMap.get(venue.city_id) || "Unknown",
-        instagram_url: url,
-        status: result.status,
-        reason: result.reason,
+        city_name: cityName,
+        instagram_raw: venue.instagram,
+        username,
+        status,
+        reason: status === 404 ? "Account not found" : `HTTP ${status}`,
       });
+      console.log(`  DEAD [${status}]  ${venue.name} (${cityName}) — @${username}`);
     }
 
-    if (checked % 25 === 0) {
-      console.log(`  Checked ${checked}/${venues.length} (${broken.length} broken, ${rateLimited.length} rate-limited)...`);
+    if (checked % 50 === 0) {
+      console.log(`  ... checked ${checked}/${venues.length}`);
     }
 
-    // Rate limit: 1s between requests to stay under Instagram's limits
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Rate limit: ~2 requests per second
+    await new Promise((r) => setTimeout(r, 500));
   }
 
-  // Retry rate-limited URLs with longer delays
+  // Retry rate-limited URLs
   if (rateLimited.length > 0) {
-    console.log(`\nRetrying ${rateLimited.length} rate-limited URLs after 30s pause...`);
-    await new Promise((resolve) => setTimeout(resolve, 30000));
+    console.log(`\nRetrying ${rateLimited.length} rate-limited URLs after 60s pause...`);
+    await new Promise((r) => setTimeout(r, 60000));
 
     for (const venue of rateLimited) {
-      const url = venue.instagram.startsWith("http")
-        ? venue.instagram
-        : `https://instagram.com/${venue.instagram.replace(/^@/, "")}`;
+      const username = normalizeUsername(venue.instagram);
+      const cityName = cityMap.get(venue.city_id) || "Unknown";
+      const { valid, status } = await checkAccount(username);
 
-      const result = await checkInstagramUrl(url);
-      if (result.reason !== "OK" && result.status !== 429) {
+      if (!valid && status !== 429) {
         broken.push({
           venue_id: venue.id,
           venue_name: venue.name,
-          city_name: cityMap.get(venue.city_id) || "Unknown",
-          instagram_url: url,
-          status: result.status,
-          reason: result.reason,
+          city_name: cityName,
+          instagram_raw: venue.instagram,
+          username,
+          status,
+          reason: status === 404 ? "Account not found" : `HTTP ${status}`,
         });
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((r) => setTimeout(r, 2000));
     }
   }
 
-  console.log(`\nDone! Checked ${checked} URLs.`);
-  console.log(`Broken/problematic links: ${broken.length}`);
+  // Report
+  const allBad = [...broken, ...malformed];
 
+  console.log(`\n--- Results ---`);
+  console.log(`Total checked: ${checked}`);
+  console.log(`Dead accounts: ${broken.length}`);
+  console.log(`Malformed entries: ${malformed.length}`);
+
+  // Save report
   const outputPath = path.join(process.cwd(), "scripts", "instagram-report.json");
-  writeFileSync(outputPath, JSON.stringify({ checked, broken_count: broken.length, broken }, null, 2));
+  writeFileSync(outputPath, JSON.stringify({ checked, broken_count: broken.length, malformed_count: malformed.length, broken, malformed }, null, 2));
   console.log(`Report saved to: ${outputPath}`);
 
   if (broken.length > 0) {
-    console.log("\nBroken links summary:");
+    console.log(`\nDead accounts:`);
     for (const b of broken) {
-      console.log(`  - ${b.venue_name} (${b.city_name}): ${b.reason} — ${b.instagram_url}`);
+      console.log(`  - ${b.venue_name} (${b.city_name}): @${b.username}`);
     }
+  }
+
+  if (malformed.length > 0) {
+    console.log(`\nMalformed entries:`);
+    for (const m of malformed) {
+      console.log(`  - ${m.venue_name} (${m.city_name}): "${m.instagram_raw}"`);
+    }
+  }
+
+  // Fix mode: remove dead links from DB
+  if (fix && allBad.length > 0) {
+    console.log(`\nRemoving instagram from ${allBad.length} venues...`);
+
+    for (const v of allBad) {
+      const { error: updateErr } = await supabase
+        .from("venues")
+        .update({ instagram: null })
+        .eq("id", v.venue_id);
+
+      if (updateErr) {
+        console.error(`  Failed to update ${v.venue_name}: ${updateErr.message}`);
+      } else {
+        console.log(`  Cleaned: ${v.venue_name}`);
+      }
+    }
+
+    console.log("\nDone! Dead links removed from database.");
+  } else if (allBad.length > 0) {
+    console.log(`\nRun with --fix to remove dead/malformed links from the database.`);
+  } else {
+    console.log("\nAll Instagram links are valid!");
   }
 }
 
-main();
+main().catch(console.error);

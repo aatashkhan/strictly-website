@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAdmin, useAdminFetch } from "./AdminContext";
 import { supabase } from "@/lib/supabase";
 import { CATEGORY_CONFIG } from "@/lib/constants";
@@ -59,6 +59,13 @@ export default function AdminPage() {
   const [reviewMode, setReviewMode] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<VenueRow | null>(null);
   const [deleteCityTarget, setDeleteCityTarget] = useState<CityInfo | null>(null);
+  const [trashMode, setTrashMode] = useState(false);
+
+  // Undo toast state
+  const [undoVenue, setUndoVenue] = useState<VenueRow | null>(null);
+  const [undoCountdown, setUndoCountdown] = useState(0);
+  const undoTimerRef = useRef<ReturnType<typeof setInterval>>();
+  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Add city modal
   const [showAddCity, setShowAddCity] = useState(false);
@@ -93,11 +100,15 @@ export default function AdminPage() {
     setVenueLoading(true);
     const params = new URLSearchParams();
     if (selectedCity) params.set("city", selectedCity);
-    if (filterCategory) params.set("category", filterCategory);
-    if (filterStatus) params.set("status", filterStatus);
-    if (filterMissing) params.set("missing_field", filterMissing);
+    if (trashMode) {
+      params.set("trash", "true");
+    } else {
+      if (filterCategory) params.set("category", filterCategory);
+      if (filterStatus) params.set("status", filterStatus);
+      if (filterMissing) params.set("missing_field", filterMissing);
+    }
     if (filterSearch) params.set("search", filterSearch);
-    params.set("sort", sort);
+    params.set("sort", trashMode ? "updated" : sort);
     params.set("limit", "200");
 
     try {
@@ -110,7 +121,7 @@ export default function AdminPage() {
     } finally {
       setVenueLoading(false);
     }
-  }, [selectedCity, filterCategory, filterStatus, filterMissing, filterSearch, sort, adminFetch]);
+  }, [selectedCity, filterCategory, filterStatus, filterMissing, filterSearch, sort, trashMode, adminFetch]);
 
   useEffect(() => {
     loadVenues();
@@ -164,6 +175,53 @@ export default function AdminPage() {
       setVenues((prev) => prev.filter((v) => v.id !== venue.id));
       if (editingVenue?.id === venue.id) setEditingVenue(null);
       setDeleteTarget(null);
+
+      // Show undo toast for 20 seconds
+      if (undoTimerRef.current) clearInterval(undoTimerRef.current);
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+      setUndoVenue(venue);
+      setUndoCountdown(20);
+      undoTimerRef.current = setInterval(() => {
+        setUndoCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(undoTimerRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      undoTimeoutRef.current = setTimeout(() => {
+        setUndoVenue(null);
+        setUndoCountdown(0);
+      }, 20000);
+    }
+  };
+
+  const handleUndoDelete = async () => {
+    if (!undoVenue) return;
+    const res = await adminFetch(`/api/admin/venues/${undoVenue.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "restore" }),
+    });
+    if (res.ok) {
+      if (undoTimerRef.current) clearInterval(undoTimerRef.current);
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+      setUndoVenue(null);
+      setUndoCountdown(0);
+      loadVenues();
+    }
+  };
+
+  const handleRestoreVenue = async (venue: VenueRow) => {
+    const res = await adminFetch(`/api/admin/venues/${venue.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "restore" }),
+    });
+    if (res.ok) {
+      setVenues((prev) => prev.filter((v) => v.id !== venue.id));
+      setVenueTotal((prev) => prev - 1);
     }
   };
 
@@ -288,6 +346,16 @@ export default function AdminPage() {
             Review Mode
           </button>
           <button
+            onClick={() => { setTrashMode(!trashMode); setEditingVenue(null); }}
+            className={`w-full px-3 py-2 border rounded-lg text-xs font-mono transition-colors ${
+              trashMode
+                ? "bg-red-500/10 border-red-500/30 text-red-600"
+                : "border-border text-secondary hover:border-gold"
+            }`}
+          >
+            {trashMode ? "Exit Trash" : "Trash"}
+          </button>
+          <button
             onClick={() => setChatOpen(!chatOpen)}
             className="w-full px-3 py-2 border border-border rounded-lg text-xs font-mono text-secondary hover:border-gold transition-colors"
           >
@@ -308,14 +376,17 @@ export default function AdminPage() {
         <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
           <div>
             <h2 className="font-serif text-2xl text-brown">
-              {selectedCity ?? "All Cities"}
+              {trashMode ? "Trash" : (selectedCity ?? "All Cities")}
             </h2>
             <p className="font-mono text-xs text-muted mt-1">
-              {venueTotal} venues{selectedCityData?.needs_review_count ? ` (${selectedCityData.needs_review_count} need review)` : ""}
+              {trashMode
+                ? `${venueTotal} deleted venue${venueTotal !== 1 ? "s" : ""}`
+                : `${venueTotal} venues${selectedCityData?.needs_review_count ? ` (${selectedCityData.needs_review_count} need review)` : ""}`
+              }
             </p>
           </div>
 
-          {selectedCity && (
+          {selectedCity && !trashMode && (
             <div className="flex items-center gap-3">
               <div className="flex border border-border rounded-lg overflow-hidden">
                 <button
@@ -356,8 +427,8 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* Filters bar (venues tab only) */}
-        {tab === "venues" && (
+        {/* Filters bar (venues tab only, hidden in trash mode) */}
+        {tab === "venues" && !trashMode && (
           <div className="px-6 py-3 border-b border-border flex flex-wrap items-center gap-3 shrink-0">
             <select
               value={filterCategory}
@@ -430,18 +501,23 @@ export default function AdminPage() {
                 ) : (
                   <div className="divide-y divide-border">
                     {venues.map((v) => (
-                      <button
+                      <div
                         key={v.id}
-                        onClick={() => setEditingVenue(v)}
+                        onClick={() => !trashMode && setEditingVenue(v)}
                         className={`w-full text-left px-6 py-3 hover:bg-cream/50 transition-colors flex items-center gap-4 ${
-                          editingVenue?.id === v.id ? "bg-gold/5" : ""
-                        }`}
+                          !trashMode ? "cursor-pointer" : ""
+                        } ${editingVenue?.id === v.id ? "bg-gold/5" : ""}`}
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-sm text-brown font-medium truncate">{v.name}</span>
-                            {v.needs_review && (
+                            {!trashMode && v.needs_review && (
                               <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-mono bg-red-500/10 text-red-600 rounded-full">review</span>
+                            )}
+                            {trashMode && v.cities && (
+                              <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-mono bg-brown/10 text-muted rounded-full">
+                                {(v.cities as { city_name: string }).city_name}
+                              </span>
                             )}
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
@@ -460,12 +536,19 @@ export default function AdminPage() {
                             )}
                           </div>
                         </div>
-                        {v.denna_note ? (
+                        {trashMode ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRestoreVenue(v); }}
+                            className="shrink-0 px-3 py-1.5 bg-green-600/10 border border-green-600/30 text-green-700 text-xs font-mono rounded-lg hover:bg-green-600/20 transition-colors"
+                          >
+                            Restore
+                          </button>
+                        ) : v.denna_note ? (
                           <p className="text-[10px] font-mono text-muted max-w-[200px] line-clamp-2 shrink-0">{v.denna_note}</p>
                         ) : (
                           <span className="text-[10px] font-mono text-red-400 shrink-0">no note</span>
                         )}
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -502,9 +585,9 @@ export default function AdminPage() {
       {/* Delete venue confirmation */}
       <ConfirmModal
         isOpen={deleteTarget !== null}
-        title="Delete venue?"
-        message={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
-        confirmLabel="Delete"
+        title="Move to trash?"
+        message={`"${deleteTarget?.name}" will be moved to trash. You can restore it later.`}
+        confirmLabel="Move to Trash"
         onConfirm={() => deleteTarget && handleDeleteVenue(deleteTarget)}
         onCancel={() => setDeleteTarget(null)}
       />
@@ -518,6 +601,25 @@ export default function AdminPage() {
         onConfirm={() => deleteCityTarget && handleDeleteCity(deleteCityTarget)}
         onCancel={() => setDeleteCityTarget(null)}
       />
+
+      {/* Undo delete toast */}
+      {undoVenue && undoCountdown > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-brown text-cream rounded-xl shadow-lg font-mono text-sm">
+          <span>&ldquo;{undoVenue.name}&rdquo; moved to trash</span>
+          <button
+            onClick={handleUndoDelete}
+            className="px-3 py-1 bg-gold text-white text-xs font-mono rounded-lg hover:bg-gold/90 transition-colors"
+          >
+            Undo ({undoCountdown}s)
+          </button>
+          <button
+            onClick={() => { setUndoVenue(null); setUndoCountdown(0); if (undoTimerRef.current) clearInterval(undoTimerRef.current); if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current); }}
+            className="text-cream/60 hover:text-cream text-lg leading-none"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* Add city modal */}
       {showAddCity && (

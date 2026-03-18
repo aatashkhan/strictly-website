@@ -28,6 +28,16 @@ interface CityOption {
   city_name: string;
 }
 
+interface PlaceCandidate {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  place_id: string;
+  types: string[];
+  google_maps_url: string;
+}
+
 interface VenueEditorProps {
   venue: VenueEditorRow;
   cities?: CityOption[];
@@ -73,6 +83,10 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
 
+  // Place lookup
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResults, setLookupResults] = useState<PlaceCandidate[] | null>(null);
+
   // Use a ref to always have the latest form values for the debounced save
   const formRef = useRef({
     name, category, subcategory, neighborhood, dennaNotes,
@@ -114,6 +128,7 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
     setNearbyGetaway((venue as Record<string, unknown>).nearby_getaway === true);
     setShowConditionalHotel(!!((venue as Record<string, unknown>).conditional_on_hotel));
     setSaved(false);
+    setLookupResults(null);
   }, [venue]);
 
   const save = useCallback(async () => {
@@ -184,6 +199,69 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
     await onSave({ image_urls: updated, image_url: updated[0] || null });
   };
 
+  // Look up venue on Google Places
+  const handleLookup = async () => {
+    if (!name.trim()) return;
+    setLookupLoading(true);
+    setLookupResults(null);
+    try {
+      // Find the city name from cityId
+      const cityName = cities?.find((c) => c.id === cityId)?.city_name ?? "";
+      const params = new URLSearchParams({ q: name.trim(), city: cityName });
+      const res = await fetchFn(`/api/admin/venues/lookup?${params}`);
+      const data = await res.json();
+      if (data.results && data.results.length > 0) {
+        setLookupResults(data.results);
+      } else {
+        setLookupResults([]);
+      }
+    } catch (e) {
+      console.error("Lookup failed:", e);
+      setLookupResults([]);
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  // Select a place from lookup results — fetch details and save
+  const handleSelectPlace = async (candidate: PlaceCandidate) => {
+    setLookupLoading(true);
+    try {
+      // Fetch full Place Details for opening hours
+      const res = await fetchFn("/api/admin/venues/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ place_id: candidate.place_id }),
+      });
+      const data = await res.json();
+      const details = data.details;
+
+      const updates: Record<string, unknown> = {
+        address: details?.address ?? candidate.address,
+        lat: details?.lat ?? candidate.lat,
+        lng: details?.lng ?? candidate.lng,
+        place_id: candidate.place_id,
+        google_maps_url: details?.google_maps_url ?? candidate.google_maps_url,
+        geocode_status: "verified",
+      };
+      if (details?.opening_hours) {
+        updates.opening_hours = details.opening_hours;
+      }
+      if (details?.website && !venue.website) {
+        updates.website = details.website;
+      }
+
+      await onSave(updates);
+      setLookupResults(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      console.error("Place select failed:", e);
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -195,15 +273,58 @@ export default function VenueEditor({ venue, cities, onSave, onDelete, onClose, 
       </div>
 
       <div className="space-y-4">
-        {/* Name */}
+        {/* Name + Lookup */}
         <div>
           <label className="block text-[10px] uppercase tracking-widest text-muted font-mono mb-1">Name</label>
-          <input
-            value={name}
-            onChange={(e) => { setName(e.target.value); debouncedSave(); }}
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream focus:outline-none focus:border-gold"
-          />
+          <div className="flex gap-2">
+            <input
+              value={name}
+              onChange={(e) => { setName(e.target.value); debouncedSave(); }}
+              className="flex-1 px-3 py-2 border border-border rounded-lg text-sm font-mono text-brown bg-cream focus:outline-none focus:border-gold"
+            />
+            <button
+              onClick={handleLookup}
+              disabled={lookupLoading || !name.trim()}
+              className="px-3 py-2 border border-gold/40 text-gold text-xs font-mono rounded-lg hover:bg-gold/10 transition-colors disabled:opacity-40 shrink-0"
+            >
+              {lookupLoading ? "..." : "Lookup"}
+            </button>
+          </div>
         </div>
+
+        {/* Place lookup results */}
+        {lookupResults !== null && (
+          <div className="border border-gold/30 rounded-lg overflow-hidden">
+            {lookupResults.length === 0 ? (
+              <div className="px-3 py-3 text-xs font-mono text-muted text-center">
+                No places found. Try adjusting the name.
+              </div>
+            ) : (
+              <>
+                <div className="px-3 py-2 bg-gold/5 text-[10px] uppercase tracking-widest text-muted font-mono border-b border-gold/20">
+                  Select the correct location
+                </div>
+                {lookupResults.map((r) => (
+                  <button
+                    key={r.place_id}
+                    onClick={() => handleSelectPlace(r)}
+                    disabled={lookupLoading}
+                    className="w-full text-left px-3 py-2.5 hover:bg-cream/50 transition-colors border-b border-border last:border-b-0 disabled:opacity-50"
+                  >
+                    <p className="text-xs font-mono text-brown font-medium">{r.name}</p>
+                    <p className="text-[10px] font-mono text-muted mt-0.5">{r.address}</p>
+                  </button>
+                ))}
+                <button
+                  onClick={() => setLookupResults(null)}
+                  className="w-full px-3 py-2 text-[10px] font-mono text-muted hover:text-brown text-center transition-colors"
+                >
+                  Dismiss
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Move to City */}
         {cities && cities.length > 0 && (

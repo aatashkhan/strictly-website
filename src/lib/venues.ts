@@ -50,6 +50,7 @@ export async function getCityMetas(): Promise<CityMeta[]> {
     const { data, error: venueErr } = await supabase
       .from("venues")
       .select("city_id, neighborhood")
+      .is("deleted_at", null)
       .range(offset, offset + PAGE_SIZE - 1);
     if (venueErr) {
       console.error("getCityMetas venue query error:", venueErr.message);
@@ -147,6 +148,7 @@ export async function getCityData(cityName: string): Promise<CityData | null> {
     .from("venues")
     .select("*")
     .eq("city_id", city.id)
+    .is("deleted_at", null)
     .order("display_order", { ascending: true, nullsFirst: false });
 
   if (venueErr) console.error("getCityData venue query error:", venueErr.message);
